@@ -75,6 +75,10 @@ module.exports = (meliService) => {
         }
     }); */
 
+    router.get("/test", (req, res) => {
+        res.send("Hello this works");
+    });
+
     return router;
 };
 

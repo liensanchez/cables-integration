@@ -10,7 +10,7 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      - MONGO_URL=mongodb://mongo:27017/cables-stock
+      - MONGODB_URI=mongodb://mongo:27017/cables-stock
     depends_on:
       - mongo
     command: npm run dev
