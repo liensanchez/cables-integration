@@ -1,73 +1,104 @@
-const MeliAPI = require('./meliAPI');
-const odooService = require('../../services/odooService');
+const MeliAPI = require("./meliAPI");
+const odooService = require("../../services/odooService");
 /* const ErrorQueue = require('../../models/ErrorQueue'); // Assuming Mongoose */
+const MeliOrder = require("../../models/MeliOrder");
 
 class MercadoLibreService {
-  constructor() {
-    this.meliAPI = new MeliAPI(); // instance to handle raw API calls
-  }
-
-  /** Step 1: Handle OAuth token exchange */
-  async exchangeCodeForToken(code, redirectUri) {
-    try {
-      const tokens = await this.meliAPI.getAccessToken(code, redirectUri);
-      // You can persist the token in DB or file for reuse
-      console.log('Access Token:', tokens.access_token);
-      return tokens;
-    } catch (error) {
-        console.error('Error exchanging code for token:', error);
-      /* await this.logError('exchangeCodeForToken', error);
-      throw error; */
+    constructor() {
+        this.meliAPI = new MeliAPI(); // instance to handle raw API calls
     }
-  }
 
-  /** Step 2: Sync Odoo inventory to Mercado Libre */
-  async syncInventoryToMeli() {
-    try {
-      const odooInventory = await odooService.getInventory(); // implement this
-      const result = await this.meliAPI.updateInventory(odooInventory);
-      return result;
-    } catch (error) {
-        console.error('Error syncing inventory to Meli:', error);
-      /* await this.logError('syncInventoryToMeli', error);
-      throw error; */
+    // Pass the received authorization code to the API method
+    async getAccessTokenWithUser(code) {
+        try {
+            const tokenResponse =
+                await this.meliAPI.getAccessTokenWithCode(code); // fetch access token with the code
+            return tokenResponse;
+        } catch (err) {
+            console.error("Error getting access token:", err);
+            throw err;
+        }
     }
-  }
 
-  /** Step 3: Fetch Mercado Libre orders and push to Odoo */
-  async processMeliOrders() {
-    try {
-      const orders = await this.meliAPI.fetchRecentOrders(); // get orders
-      const result = await odooService.pushOrdersToOdoo(orders); // insert into Odoo
-      console.log('Orders to be processed:', orders);
-      return result;
-    } catch (error) {
-        console.error('Error processing Meli orders:', error);
-      /* await this.logError('processMeliOrders', error);
-      throw error; */
+    // Method to get products for the user
+    async getUserProducts() {
+        try {
+            const products = await this.meliAPI.getUserProducts(); // fetch products using the access token
+            return products;
+        } catch (err) {
+            console.error("Error fetching products:", err);
+            throw err;
+        }
     }
-  }
 
-  /** Step 4: Get list of errors from the queue */
-  async getErrorQueue() {
-    try {
-      return await ErrorQueue.find({ service: 'mercadolibre' }).lean();
-    } catch (error) {
-      throw new Error('Failed to load error queue');
+    // Method to get orders for the user
+    async getUserOrders() {
+        try {
+            const orders = await this.meliAPI.getUserOrders();
+
+            const storedOrders = await Promise.all(
+                orders.map(async (order) => {
+                    // Check if order already exists
+                    const existing = await MeliOrder.findOne({
+                        orderId: order.id,
+                    });
+
+                    if (existing) {
+                        // Update the existing one
+                        return await MeliOrder.findOneAndUpdate(
+                            { orderId: order.id },
+                            {
+                                status: order.status,
+                                date_created: order.date_created,
+                                total_amount: order.total_amount,
+                                buyer_nickname: order.buyer,
+                                shipping_id: order.shipping_id,
+                            },
+                            { new: true }
+                        );
+                    } else {
+                        // Create new
+                        return await MeliOrder.create({
+                            orderId: order.id,
+                            status: order.status,
+                            date_created: order.date_created,
+                            total_amount: order.total_amount,
+                            buyer_nickname: order.buyer,
+                            shipping_id: order.shipping_id,
+                        });
+                    }
+                })
+            );
+
+            return storedOrders;
+        } catch (err) {
+            console.error("Error fetching and saving orders:", err);
+            throw err;
+        }
     }
-  }
 
-  /** Optional helper: Log error for retries */
-  async logError(method, error) {
-    const entry = new ErrorQueue({
-      service: 'mercadolibre',
-      method,
-      message: error.message || 'Unknown error',
-      stack: error.stack || '',
-      timestamp: new Date(),
-    });
-    await entry.save();
-  }
+    /* async subscribeToWebhook(notificationUrl) {
+        try {
+            const result =
+                await this.meliAPI.subscribeToNotifications(notificationUrl);
+            return result;
+        } catch (err) {
+            console.error("Error subscribing to webhook:", err);
+            throw err;
+        }
+    } */
 }
 
 module.exports = MercadoLibreService;
+
+/* 
+    async getAccessTokenWithUser() {
+        try {
+            const tokenResponse = await this.meliAPI.getAccessTokenWithUser(); // fetch access token from meliAPI
+            return tokenResponse;
+        } catch (err) {
+            console.error("Error getting access token:", err);
+            throw err;
+        }
+    }
+*/

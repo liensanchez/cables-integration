@@ -15,7 +15,7 @@
         "bull": "^4.16.5",
         "dotenv": "^16.5.0",
         "express": "^5.1.0",
-        "mongoose": "^8.14.2",
+        "mongoose": "^8.14.3",
         "node-cron": "^4.0.0",
         "oauth2-client": "^0.0.4",
         "pg": "^8.15.6",

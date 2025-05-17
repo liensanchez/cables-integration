@@ -4,6 +4,15 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const cron = require('node-cron');
+const mongoose = require("mongoose");
+
+mongoose
+    .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/cables-stock", {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    })
+    .then(() => console.log("✅ MongoDB connected"))
+    .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
