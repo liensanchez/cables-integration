@@ -1,5 +1,5 @@
 const MeliAPI = require("./meliAPI");
-const odooService = require("../../services/odooService");
+/* const odooService = require("../../services/odooService"); */
 /* const ErrorQueue = require('../../models/ErrorQueue'); // Assuming Mongoose */
 const MeliOrder = require("../../models/MeliOrder");
 

@@ -1,44 +1,100 @@
 // src/services/odooService.js
-const axios = require('axios');
-require('dotenv').config();
+const { call } = require("../utils/odooRpc");
+require("dotenv").config();
 
-const odooUrl = process.env.ODOO_XMLRPC_URL; // Example: http://localhost:8069
-const odooDb = process.env.ODOO_DB;
-const odooUsername = process.env.ODOO_USER;
-const odooPassword = process.env.ODOO_PASS;
-
-/** 
- * Mock inventory format:
- * [
- *   { meliId: 'MLA123456', availableQuantity: 10 },
- *   ...
- * ]
- */
-async function getInventory() {
-  // Replace this with real Odoo logic (XML-RPC or REST)
-  return [
-    { meliId: 'MLA123456', availableQuantity: 12 },
-    { meliId: 'MLA654321', availableQuantity: 5 },
-  ];
-}
-
-async function pushOrdersToOdoo(meliOrders) {
-  const results = [];
-
-  for (const order of meliOrders) {
-    try {
-      // Format and push to Odoo (via RPC or REST)
-      console.log('Creating order in Odoo:', order.id);
-      results.push({ orderId: order.id, status: 'created' });
-    } catch (err) {
-      results.push({ orderId: order.id, status: 'error', error: err.message });
+class OdooService {
+    constructor() {
+        // If needed, add configuration here (e.g., session, auth)
     }
-  }
 
-  return results;
+    async getInventory() {
+        try {
+            const productIds = await call("product.product", "search", [
+                [["default_code", "!=", false]],
+            ]);
+
+            if (!productIds.length) return [];
+
+            const products = await call("product.product", "read", [
+                productIds,
+                ["default_code", "qty_available"],
+            ]);
+
+            return products.map((prod) => ({
+                meliId: prod.default_code,
+                availableQuantity: prod.qty_available,
+            }));
+        } catch (err) {
+            console.error(
+                "❌ Failed to fetch inventory from Odoo:",
+                err.message
+            );
+            throw err;
+        }
+    }
+
+    async pushOrdersToOdoo(meliOrders) {
+        const results = [];
+
+        for (const order of meliOrders) {
+            try {
+                const partnerName =
+                    order.buyer_nickname || "MercadoLibre Buyer";
+
+                // Step 1: Find or create the customer (res.partner)
+                const partnerIds = await call("res.partner", "search", [
+                    [["name", "=", partnerName]],
+                ]);
+                let partnerId;
+
+                if (partnerIds.length) {
+                    partnerId = partnerIds[0];
+                } else {
+                    partnerId = await call("res.partner", "create", [
+                        {
+                            name: partnerName,
+                            email: `${order.orderId}@meli.local`,
+                        },
+                    ]);
+                }
+
+                // Step 2: Create sale order
+                const saleOrderId = await call("sale.order", "create", [
+                    {
+                        partner_id: partnerId,
+                        origin: `MELI-${order.orderId}`,
+                        note: `Imported from Mercado Libre on ${order.date_created}`,
+                    },
+                ]);
+
+                // Step 3: Add a dummy sale order line
+                await call("sale.order.line", "create", [
+                    {
+                        order_id: saleOrderId,
+                        name: "MercadoLibre Order",
+                        product_uom_qty: 1,
+                        price_unit: order.total_amount,
+                        product_id: 1, // TODO: replace with real product_id logic
+                    },
+                ]);
+
+                results.push({
+                    orderId: order.orderId,
+                    status: "created",
+                    saleOrderId,
+                });
+            } catch (err) {
+                console.error("Error pushing order to Odoo:", err.message);
+                results.push({
+                    orderId: order.orderId,
+                    status: "error",
+                    error: err.message,
+                });
+            }
+        }
+
+        return results;
+    }
 }
 
-module.exports = {
-  getInventory,
-  pushOrdersToOdoo,
-};
+module.exports = OdooService;

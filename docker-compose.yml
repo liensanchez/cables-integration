@@ -16,12 +16,15 @@ services:
     command: npm run dev
 
   mongo:
+    logging:
+      driver: "none"
     image: mongo:6
     container_name: mongo
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    command: mongod --quiet
 
 volumes:
   mongo_data:

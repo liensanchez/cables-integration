@@ -26,6 +26,10 @@ const MercadoLibreService = require('./src/services/mercadolibre/meliService');
 const meliService = new MercadoLibreService();
 app.use('/api/meli', require('./src/routes/meliRoutes')(meliService));
 
+const odooService = require('./src/services/odooService');
+const odooSer = new odooService();
+app.use('/api/sync', require('./src/routes/routes.js')(odooSer, meliService));
+
 
 /* const AmazonService = require('./src/services/amazon/amazonService'); */
 /* const ShopifyService = require('./src/services/shopify/shopifyService'); */
