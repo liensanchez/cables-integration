@@ -1,11 +1,13 @@
+// src/services/mercadolibre/meliService.js
 const MeliAPI = require("./meliAPI");
-/* const odooService = require("../../services/odooService"); */
+const odooService = require("../../services/odooService");
 /* const ErrorQueue = require('../../models/ErrorQueue'); // Assuming Mongoose */
 const MeliOrder = require("../../models/MeliOrder");
 
 class MercadoLibreService {
     constructor() {
         this.meliAPI = new MeliAPI(); // instance to handle raw API calls
+        this.odooService = new odooService(); // instance to handle Odoo API calls
     }
 
     // Pass the received authorization code to the API method
@@ -36,41 +38,47 @@ class MercadoLibreService {
         try {
             const orders = await this.meliAPI.getUserOrders();
 
-            const storedOrders = await Promise.all(
+            const processedOrders = await Promise.all(
                 orders.map(async (order) => {
-                    // Check if order already exists
                     const existing = await MeliOrder.findOne({
                         orderId: order.id,
                     });
 
                     if (existing) {
-                        // Update the existing one
-                        return await MeliOrder.findOneAndUpdate(
+                        await MeliOrder.findOneAndUpdate(
                             { orderId: order.id },
                             {
                                 status: order.status,
                                 date_created: order.date_created,
                                 total_amount: order.total_amount,
-                                buyer_nickname: order.buyer,
-                                shipping_id: order.shipping_id,
+                                buyer: order.buyer,
+                                currency: order.currency,
+                                order_items: order.order_items,
+                                payments: order.payments,
                             },
                             { new: true }
                         );
                     } else {
-                        // Create new
-                        return await MeliOrder.create({
+                        await MeliOrder.create({
                             orderId: order.id,
                             status: order.status,
                             date_created: order.date_created,
                             total_amount: order.total_amount,
-                            buyer_nickname: order.buyer,
-                            shipping_id: order.shipping_id,
+                            buyer_nickname: order.buyer.nickname,
+                            currency: order.currency,
+                            order_items: order.order_items,
+                            payments: order.payments,
                         });
                     }
+
+                    // Enviar a Odoo
+                    await this.odooService.pushOrdersToOdoo([order]);
+
+                    return order;
                 })
             );
 
-            return storedOrders;
+            return processedOrders;
         } catch (err) {
             console.error("Error fetching and saving orders:", err);
             throw err;

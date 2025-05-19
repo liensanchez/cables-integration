@@ -11,20 +11,72 @@ services:
       - /app/node_modules
     environment:
       - MONGODB_URI=mongodb://mongo:27017/cables-stock
+      - ODOO_XMLRPC_URL=http://odoo:8069
+      - ODOO_DB=odoo
+      - ODOO_USER=admin
+      - ODOO_PASS=admin
     depends_on:
       - mongo
+      - odoo
     command: npm run dev
 
   mongo:
-    logging:
-      driver: "none"
     image: mongo:6
     container_name: mongo
+    logging:
+      driver: "none"
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     command: mongod --quiet
 
+  odoo:
+    image: odoo:16
+    container_name: odoo
+    logging:
+      driver: "none"  # Completely disable all logging
+    depends_on:
+      cables-odoo-db:
+        condition: service_healthy
+    ports:
+      - "8069:8069"
+    environment:
+      - HOST=cables-odoo-db
+      - USER=odoo
+      - PASSWORD=odoo
+      - PGHOST=cables-odoo-db
+      - PGUSER=odoo
+      - PGPASSWORD=odoo
+      - PGDATABASE=odoo
+    volumes:
+      - odoo_data:/var/lib/odoo
+    command: odoo -i base --database=odoo
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  cables-odoo-db:
+    image: postgres:13
+    container_name: cables-odoo-db
+    environment:
+      - POSTGRES_DB=odoo
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+    volumes:
+      - odoo_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   mongo_data:
+  odoo_data:
+  odoo_db_data:

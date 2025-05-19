@@ -160,7 +160,7 @@ class MeliAPI {
         }
 
         try {
-            // Step 1: Get the authenticated user's ID
+            // Paso 1: Obtener el ID del usuario autenticado
             const userInfo = await axios.get(`${this.baseUrl}/users/me`, {
                 headers: {
                     Authorization: `Bearer ${this.token}`,
@@ -169,7 +169,7 @@ class MeliAPI {
 
             const userId = userInfo.data.id;
 
-            // Step 2: Fetch orders
+            // Paso 2: Buscar las órdenes del vendedor
             const ordersRes = await axios.get(
                 `${this.baseUrl}/orders/search?seller=${userId}`,
                 {
@@ -179,13 +179,40 @@ class MeliAPI {
                 }
             );
 
+            // Paso 3: Transformar los datos relevantes para Odoo
             const orders = ordersRes.data.results.map((order) => ({
                 id: order.id,
                 status: order.status,
                 date_created: order.date_created,
                 total_amount: order.total_amount,
-                buyer: order.buyer.nickname,
-                shipping_id: order.shipping?.id,
+                currency: order.currency_id,
+                buyer: {
+                    id: order.buyer?.id,
+                    nickname: order.buyer?.nickname,
+                },
+                order_items: order.order_items.map((item) => ({
+                    sku: item.item?.seller_sku,
+                    title: item.item?.title,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    currency: item.currency_id,
+                })),
+                payments: order.payments.map((payment) => ({
+                    id: payment.id,
+                    order_id: payment.order_id,
+                    payer_id: payment.payer_id,
+                    installments: payment.installments,
+                    processing_mode: payment.processing_mode,
+                    payment_method_id: payment.payment_method_id,
+                    payment_type: payment.payment_type,
+                    status: payment.status,
+                    status_detail: payment.status_detail,
+                    transaction_amount: payment.transaction_amount,
+                    total_paid_amount: payment.total_paid_amount,
+                    net_received_amount: payment.net_received_amount,
+                    date_approved: payment.date_approved,
+                    date_created: payment.date_created,
+                })),
             }));
 
             return orders;

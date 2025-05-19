@@ -24,10 +24,12 @@ app.use(bodyParser.json());
 // *MERCADO LIBRE*
 const MercadoLibreService = require('./src/services/mercadolibre/meliService');
 const meliService = new MercadoLibreService();
-app.use('/api/meli', require('./src/routes/meliRoutes')(meliService));
 
+// *ODOO*
 const odooService = require('./src/services/odooService');
 const odooSer = new odooService();
+
+app.use('/api/meli', require('./src/routes/meliRoutes')(meliService));
 app.use('/api/sync', require('./src/routes/routes.js')(odooSer, meliService));
 
 
