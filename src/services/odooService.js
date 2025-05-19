@@ -90,10 +90,34 @@ class OdooService {
                     ]);
                 }
 
+                // Step 4: Confirm the sale order (creates stock moves)
+                await call("sale.order", "action_confirm", [saleOrderId]);
+
+                // Step 5: Create and validate the delivery
+                const pickingIds = await call("stock.picking", "search", [
+                    [
+                        ["origin", "=", `MELI-${order.orderId}`],
+                        ["state", "!=", "done"],
+                    ],
+                ]);
+
+                if (pickingIds.length > 0) {
+                    // Validate each picking (delivery)
+                    for (const pickingId of pickingIds) {
+                        await call("stock.picking", "action_assign", [
+                            pickingId,
+                        ]);
+                        await call("stock.picking", "button_validate", [
+                            pickingId,
+                        ]);
+                    }
+                }
+
                 results.push({
                     orderId: order.orderId,
-                    status: "created",
+                    status: "completed",
                     saleOrderId,
+                    inventoryUpdated: true,
                 });
             } catch (err) {
                 console.error("Error pushing order to Odoo:", err.message);

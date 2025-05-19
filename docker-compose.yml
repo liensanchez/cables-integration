@@ -49,6 +49,7 @@ services:
       - PGUSER=odoo
       - PGPASSWORD=odoo
       - PGDATABASE=odoo
+      - ADMIN_PASS=admin
     volumes:
       - odoo_data:/var/lib/odoo
     command: odoo -i base --database=odoo
