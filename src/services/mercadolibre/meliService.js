@@ -85,28 +85,51 @@ class MercadoLibreService {
         }
     }
 
-    /* async subscribeToWebhook(notificationUrl) {
+    async getSingleOrder(orderId) {
         try {
-            const result =
-                await this.meliAPI.subscribeToNotifications(notificationUrl);
-            return result;
-        } catch (err) {
-            console.error("Error subscribing to webhook:", err);
-            throw err;
-        }
-    } */
-}
+            // Fetch the order from MercadoLibre API
+            const order = await this.meliAPI.getSingleOrder(orderId);
 
-module.exports = MercadoLibreService;
+            // Check if order exists in database
+            const existing = await MeliOrder.findOne({ orderId: order.id });
 
-/* 
-    async getAccessTokenWithUser() {
-        try {
-            const tokenResponse = await this.meliAPI.getAccessTokenWithUser(); // fetch access token from meliAPI
-            return tokenResponse;
+            if (existing) {
+                await MeliOrder.findOneAndUpdate(
+                    { orderId: order.id },
+                    {
+                        status: order.status,
+                        date_created: order.date_created,
+                        total_amount: order.total_amount,
+                        buyer: order.buyer,
+                        currency: order.currency,
+                        order_items: order.order_items,
+                        payments: order.payments,
+                    },
+                    { new: true }
+                );
+            } else {
+                await MeliOrder.create({
+                    orderId: order.id,
+                    status: order.status,
+                    date_created: order.date_created,
+                    total_amount: order.total_amount,
+                    buyer_nickname: order.buyer.nickname,
+                    currency: order.currency,
+                    order_items: order.order_items,
+                    payments: order.payments,
+                });
+            }
+
+            // Send to Odoo
+            await this.odooService.pushOrdersToOdoo([order]);
+
+            return order;
         } catch (err) {
-            console.error("Error getting access token:", err);
+            console.error("Error fetching single order:", err);
             throw err;
         }
     }
-*/
+
+}
+
+module.exports = MercadoLibreService;

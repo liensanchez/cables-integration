@@ -225,70 +225,68 @@ class MeliAPI {
         }
     }
 
-    // Subscribe to notifications
-    /* async subscribeToNotifications(notificationUrl) {
-        if (!this.token) {
-            throw new Error("Access token is missing");
-        }
-
+    // fetch single user's orders
+    async getSingleOrder(orderId) {
         try {
-            const res = await axios.post(
-                `${this.baseUrl}/users/${this.userId}/notifications`,
-                {
-                    url: notificationUrl,
-                    topics: ["orders"], // You can add more topics if needed
-                },
+            if (!this.token) {
+                throw new Error("No access token available");
+            }
+
+            const response = await axios.get(
+                `${this.baseUrl}/orders/${orderId}`,
                 {
                     headers: {
                         Authorization: `Bearer ${this.token}`,
-                        "Content-Type": "application/json",
                     },
                 }
             );
 
-            console.log("✅ Webhook subscribed successfully:", res.data);
-            return res.data;
+            const order = response.data;
+
+            // Transform the data to match getUserOrders() format
+            return {
+                id: order.id,
+                status: order.status,
+                date_created: order.date_created,
+                total_amount: order.total_amount,
+                currency: order.currency_id,
+                buyer: {
+                    id: order.buyer?.id,
+                    nickname: order.buyer?.nickname,
+                },
+                order_items: order.order_items.map((item) => ({
+                    sku: item.item?.seller_sku, // Make sure this matches your Odoo expected field
+                    title: item.item?.title,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    currency: item.currency_id,
+                })),
+                payments: order.payments.map((payment) => ({
+                    id: payment.id,
+                    order_id: payment.order_id,
+                    payer_id: payment.payer_id,
+                    installments: payment.installments,
+                    processing_mode: payment.processing_mode,
+                    payment_method_id: payment.payment_method_id,
+                    payment_type: payment.payment_type,
+                    status: payment.status,
+                    status_detail: payment.status_detail,
+                    transaction_amount: payment.transaction_amount,
+                    total_paid_amount: payment.total_paid_amount,
+                    net_received_amount: payment.net_received_amount,
+                    date_approved: payment.date_approved,
+                    date_created: payment.date_created,
+                })),
+            };
         } catch (error) {
             console.error(
-                "❌ Failed to subscribe to webhook:",
+                "❌ Failed to get single order:",
                 error.response?.data || error.message
             );
             throw error;
         }
-    } */
+    }
+
 }
 
 module.exports = MeliAPI;
-
-/* async getAccessTokenWithUser() {
-        try {
-            const payload = new URLSearchParams({
-                grant_type: "password",
-                client_id: this.clientId,
-                client_secret: this.clientSecret,
-                username: this.Username,
-                password: this.Password,
-            });
-
-            const res = await axios.post(
-                `${this.baseUrl}/oauth/token`,
-                payload.toString(),
-                {
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
-                }
-            );
-
-            this.token = res.data.access_token;
-            console.log("✅ Access token:", this.token);
-
-            return res.data;
-        } catch (error) {
-            console.error(
-                "❌ Failed to get access token:",
-                error.response?.data || error.message
-            );
-            throw error;
-        }
-    } */

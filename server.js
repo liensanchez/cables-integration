@@ -44,19 +44,6 @@ app.use('/api/sync', require('./src/routes/routes.js')(odooSer, meliService));
 /* app.use('/api/amazon', require('./src/routes/amazonRoutes')(amazonService)); */
 /* app.use('/api/shopify', require('./src/routes/shopifyRoutes')(shopifyService)); */
 
-// Scheduled jobs
-cron.schedule('*/15 * * * *', () => {
-  console.log('Running scheduled inventory sync');
-  /* amazonService.syncInventoryToAmazon(); */
-  /* meliService.syncInventoryToMeli(); */
-});
-
-cron.schedule('*/5 * * * *', () => {
-  console.log('Running scheduled order processing');
-  /* amazonService.processAmazonOrders(); */
-  /* meliService.processMeliOrders(); */
-  /* shopifyService.processShopifyOrders(); */
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
