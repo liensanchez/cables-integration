@@ -232,7 +232,8 @@ class MeliAPI {
                 throw new Error("No access token available");
             }
 
-            const response = await axios.get(
+            // First get the basic order information
+            const orderResponse = await axios.get(
                 `${this.baseUrl}/orders/${orderId}`,
                 {
                     headers: {
@@ -240,10 +241,42 @@ class MeliAPI {
                     },
                 }
             );
+            const order = orderResponse.data;
 
-            const order = response.data;
+            // Then get the shipping information (this often comes from a separate endpoint)
+            const shippingResponse = await axios.get(
+                `${this.baseUrl}/shipments/${order.shipping.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+            const shipping = shippingResponse.data;
 
-            // Transform the data to match getUserOrders() format
+            // Extract receiver address (this is where most shipping info is)
+            const receiverAddress = shipping.receiver_address;
+
+            // Format the full shipping address
+            const fullShippingAddress = [
+                receiverAddress.street_name,
+                receiverAddress.street_number,
+                receiverAddress.comment,
+                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
+            ]
+                .filter(Boolean)
+                .join(" - ");
+
+            // Format the full billing address (same as shipping unless specified otherwise)
+            const fullBillingAddress = [
+                receiverAddress.street_name,
+                receiverAddress.street_number,
+                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
+            ]
+                .filter(Boolean)
+                .join(" - ");
+
+            // Transform the data
             return {
                 id: order.id,
                 status: order.status,
@@ -251,31 +284,54 @@ class MeliAPI {
                 total_amount: order.total_amount,
                 currency: order.currency_id,
                 buyer: {
-                    id: order.buyer?.id,
-                    nickname: order.buyer?.nickname,
+                    id: order.buyer.id,
+                    nickname: order.buyer.nickname,
+                    email: order.buyer.email,
+                    phone: order.buyer.phone?.number || null,
+                    first_name: order.buyer.first_name,
+                    last_name: order.buyer.last_name,
+                    identification: {
+                        type: order.buyer.identification?.type || "DNI",
+                        number:
+                            order.buyer.identification?.number || "11111111",
+                    },
+                },
+                shipping_info: {
+                    receiver_name: shipping.receiver_address.receiver_name,
+                    receiver_phone: shipping.receiver_address.receiver_phone,
+                    address: fullShippingAddress,
+                    shipping_type: shipping.shipping_type,
+                    shipping_cost: shipping.cost,
+                    shipping_mode: shipping.shipping_mode,
+                    shipping_status: shipping.status,
+                },
+                billing_info: {
+                    tax_payer_type:
+                        order.buyer.tax_payer_type || "Consumidor Final",
+                    address: fullBillingAddress,
+                    buyer_name: `${order.buyer.first_name} ${order.buyer.last_name}`,
+                    identification: {
+                        type: order.buyer.identification?.type || "DNI",
+                        number:
+                            order.buyer.identification?.number || "11111111",
+                    },
                 },
                 order_items: order.order_items.map((item) => ({
-                    sku: item.item?.seller_sku, // Make sure this matches your Odoo expected field
-                    title: item.item?.title,
+                    sku: item.item.seller_sku,
+                    title: item.item.title,
                     quantity: item.quantity,
                     unit_price: item.unit_price,
                     currency: item.currency_id,
                 })),
                 payments: order.payments.map((payment) => ({
                     id: payment.id,
-                    order_id: payment.order_id,
-                    payer_id: payment.payer_id,
-                    installments: payment.installments,
-                    processing_mode: payment.processing_mode,
-                    payment_method_id: payment.payment_method_id,
-                    payment_type: payment.payment_type,
+                    payment_method: payment.payment_method_id,
                     status: payment.status,
                     status_detail: payment.status_detail,
-                    transaction_amount: payment.transaction_amount,
-                    total_paid_amount: payment.total_paid_amount,
-                    net_received_amount: payment.net_received_amount,
+                    total_paid: payment.total_paid_amount,
+                    installments: payment.installments,
+                    installment_amount: payment.transaction_amount,
                     date_approved: payment.date_approved,
-                    date_created: payment.date_created,
                 })),
             };
         } catch (error) {
@@ -287,6 +343,105 @@ class MeliAPI {
         }
     }
 
+    // fetch single user's buyer info
+    async getBuyerInfo(buyerId) {
+        try {
+            if (!this.token) {
+                throw new Error("No access token available");
+            }
+
+            const response = await axios.get(
+                `${this.baseUrl}/users/${buyerId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error(
+                "❌ Failed to get buyer info:",
+                error.response?.data || error.message
+            );
+            throw error;
+        }
+    }
+
+    //For testing purposes
+    async createFullTestUser() {
+        try {
+            // Si no tenés accessToken, pedilo dentro del método:
+            if (!this.accessToken) {
+                const payload = new URLSearchParams({
+                    grant_type: "client_credentials",
+                    client_id: this.clientId,
+                    client_secret: this.clientSecret,
+                });
+
+                const res = await axios.post(
+                    `${this.baseUrl}/oauth/token`,
+                    payload.toString(),
+                    {
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                        },
+                    }
+                );
+
+                this.accessToken = res.data.access_token;
+                console.log(
+                    "✅ App access token obtained inside createFullTestUser"
+                );
+            }
+
+            // Ahora sí hacés la llamada para crear usuario de prueba
+            const userResponse = await axios.post(
+                `${this.baseUrl}/users/test_user`,
+                { site_id: "MLA" },
+                {
+                    headers: { "Content-Type": "application/json" },
+                    params: {
+                        access_token: this.accessToken,
+                    },
+                }
+            );
+
+            const testUser = userResponse.data;
+            console.log("✅ Test user created:", testUser.nickname);
+
+            // Simulación de datos adicionales
+            const simulatedProfile = {
+                ...testUser,
+                simulated: {
+                    email: testUser.email,
+                    phone: {
+                        number: "123456789",
+                        area_code: "11",
+                        extension: null,
+                        verified: true,
+                    },
+                    address: {
+                        street_name: "Av. Siempre Viva",
+                        street_number: "742",
+                        city: "Springfield",
+                        zip_code: "1234",
+                        state: "Buenos Aires",
+                        country: "Argentina",
+                    },
+                },
+            };
+
+            return simulatedProfile;
+        } catch (err) {
+            console.error(
+                "❌ Error in createFullTestUser:",
+                err.response?.data || err.message
+            );
+            throw err;
+        }
+    }
 }
 
 module.exports = MeliAPI;

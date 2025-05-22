@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 module.exports = (meliService) => {
+    // route to get the auth
     router.get("/auth/user", async (req, res, next) => {
         const code = req.query.code; // Expecting code as a query parameter
         if (!code) {
@@ -19,7 +20,7 @@ module.exports = (meliService) => {
         }
     });
 
-    // New route to get the products
+    // route to get the products
     router.get("/user/products", async (req, res, next) => {
         try {
             const products = await meliService.getUserProducts();
@@ -38,7 +39,7 @@ module.exports = (meliService) => {
         }
     });
 
-    // Add this new route to get a single order by ID
+    // route to get a single order by ID
     router.get("/user/orders/:orderId", async (req, res, next) => {
         try {
             const orderId = req.params.orderId;
@@ -53,45 +54,62 @@ module.exports = (meliService) => {
         }
     });
 
+    // route to get a single buyer by ID
+    router.get("/user/buyer/:buyerId", async (req, res, next) => {
+        try {
+            const buyerId = req.params.buyerId;
+            if (!buyerId) {
+                return res.status(400).json({ message: "Missing buyer ID" });
+            }
+
+            const buyer = await meliService.getBuyerInfo(buyerId);
+            res.json(buyer);
+        } catch (err) {
+            next(err);
+        }
+    });
+
     // This will receive Mercado Libre notifications
     router.post("/notifications", async (req, res) => {
         const body = req.body;
-        console.log(
-            "📦 Received webhook notification from Mercado Libre:",
-            JSON.stringify(body, null, 2)
-        );
+        console.log("📦 Received ML webhook:", body.topic, body.resource);
 
         try {
-            // Check if this is an order-related notification
             if (
                 body.topic === "orders_v2" &&
                 body.resource.includes("/orders/")
             ) {
-                // Extract the order ID from the resource URL
                 const orderId = body.resource.split("/orders/")[1];
 
-                console.log(`🔄 Processing order ${orderId} from webhook`);
-
-                // Fetch and process the single order
-                const order = await meliService.getSingleOrder(orderId);
-
-                // Optional: Add additional logging
                 console.log(
-                    `✅ Processed order ${orderId} with status ${order.status}`
+                    `🔍 Processing order notification for ID: ${orderId}`
+                );
+
+                const order = await meliService.getSingleOrder(orderId);
+                console.log(
+                    `✅ Processed order ${orderId} for buyer ${order.buyer?.nickname}`
                 );
             }
 
-            // Always respond quickly to the webhook
             res.status(200).send("OK");
         } catch (err) {
             console.error("Webhook processing error:", err);
-            // Still return 200 to prevent MercadoLibre from retrying excessively
             res.status(200).send("OK");
         }
     });
 
     router.get("/test", (req, res) => {
         res.send("Hello this works");
+    });
+
+    router.post("/test-user", async (req, res) => {
+        try {
+            const testUser = await meliService.createTestUser();
+            res.json(testUser);
+        } catch (err) {
+            console.error("Error creating test user:", err.message);
+            res.status(500).json({ error: err.message });
+        }
     });
 
     return router;

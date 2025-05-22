@@ -1,4 +1,4 @@
-//src/models/MeliOrder.js
+// src/models/MeliOrder.js
 const mongoose = require("mongoose");
 
 const MeliOrderSchema = new mongoose.Schema(
@@ -8,55 +8,38 @@ const MeliOrderSchema = new mongoose.Schema(
         date_created: Date,
         total_amount: Number,
         currency: String,
-
         buyer: {
             id: Number,
             nickname: String,
+            first_name: String,
+            last_name: String,
+            email: String,
+            phone: String, // Simplified phone storage
+            identification_type: String, // Store type separately
+            identification_number: String // Store number separately
         },
-
-        shipping_id: Number,
-
+        shipping: {
+            receiver_name: String,
+            receiver_phone: String,
+            address: String
+        },
         order_items: [
             {
-                item: {
-                    id: String,
-                    title: String,
-                    category_id: String,
-                    seller_sku: String,
-                    condition: String,
-                    warranty: String,
-                },
+                sku: String,
+                title: String,
                 quantity: Number,
                 unit_price: Number,
-                full_unit_price: Number,
-                currency_id: String,
-                sale_fee: Number,
-                listing_type_id: String,
-                requested_quantity: {
-                    measure: String,
-                    value: Number,
-                },
-            },
+                currency: String,
+            }
         ],
-
         payments: [
             {
                 id: Number,
-                order_id: Number,
-                payer_id: Number,
-                installments: Number,
-                processing_mode: String,
-                payment_method_id: String,
-                payment_type: String,
                 status: String,
-                status_detail: String,
-                transaction_amount: Number,
-                total_paid_amount: Number,
-                net_received_amount: Number,
-                date_approved: Date,
-                date_created: Date,
-            },
-        ],
+                total_paid: Number,
+                date_approved: Date
+            }
+        ]
     },
     { timestamps: true }
 );
