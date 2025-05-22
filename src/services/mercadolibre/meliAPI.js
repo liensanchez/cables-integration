@@ -232,7 +232,7 @@ class MeliAPI {
                 throw new Error("No access token available");
             }
 
-            // First get the basic order information
+            // Obtener la orden
             const orderResponse = await axios.get(
                 `${this.baseUrl}/orders/${orderId}`,
                 {
@@ -243,7 +243,7 @@ class MeliAPI {
             );
             const order = orderResponse.data;
 
-            // Then get the shipping information (this often comes from a separate endpoint)
+            // Obtener información de envío
             const shippingResponse = await axios.get(
                 `${this.baseUrl}/shipments/${order.shipping.id}`,
                 {
@@ -254,10 +254,8 @@ class MeliAPI {
             );
             const shipping = shippingResponse.data;
 
-            // Extract receiver address (this is where most shipping info is)
             const receiverAddress = shipping.receiver_address;
 
-            // Format the full shipping address
             const fullShippingAddress = [
                 receiverAddress.street_name,
                 receiverAddress.street_number,
@@ -267,7 +265,6 @@ class MeliAPI {
                 .filter(Boolean)
                 .join(" - ");
 
-            // Format the full billing address (same as shipping unless specified otherwise)
             const fullBillingAddress = [
                 receiverAddress.street_name,
                 receiverAddress.street_number,
@@ -276,7 +273,8 @@ class MeliAPI {
                 .filter(Boolean)
                 .join(" - ");
 
-            // Transform the data
+            const logisticType = shipping.logistic_type || null;
+
             return {
                 id: order.id,
                 status: order.status,
@@ -297,13 +295,15 @@ class MeliAPI {
                     },
                 },
                 shipping_info: {
-                    receiver_name: shipping.receiver_address.receiver_name,
-                    receiver_phone: shipping.receiver_address.receiver_phone,
+                    receiver_name: receiverAddress.receiver_name,
+                    receiver_phone: receiverAddress.receiver_phone,
                     address: fullShippingAddress,
                     shipping_type: shipping.shipping_type,
                     shipping_cost: shipping.cost,
                     shipping_mode: shipping.shipping_mode,
                     shipping_status: shipping.status,
+                    logistic_type: logisticType,
+                    is_fulfillment: logisticType === "fulfillment",
                 },
                 billing_info: {
                     tax_payer_type:
