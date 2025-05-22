@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+  app:
+    build: .
+    container_name: cables-integration-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/cables-stock
+    depends_on:
+      - mongo
+    command: npm run start  # Usa el comando apropiado para producción
+
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    logging:
+      driver: "none"
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    command: mongod --quiet
+
+volumes:
+  mongo_data:
