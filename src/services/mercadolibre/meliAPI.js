@@ -289,9 +289,9 @@ class MeliAPI {
                     first_name: order.buyer.first_name,
                     last_name: order.buyer.last_name,
                     identification: {
-                        type: order.buyer.identification?.type || "DNI",
+                        type: order.buyer.identification?.type || "ID",
                         number:
-                            order.buyer.identification?.number || "11111111",
+                            order.buyer.identification?.number || "No available",
                     },
                 },
                 shipping_info: {
@@ -311,9 +311,9 @@ class MeliAPI {
                     address: fullBillingAddress,
                     buyer_name: `${order.buyer.first_name} ${order.buyer.last_name}`,
                     identification: {
-                        type: order.buyer.identification?.type || "DNI",
+                        type: order.buyer.identification?.type || "ID",
                         number:
-                            order.buyer.identification?.number || "11111111",
+                            order.buyer.identification?.number || "No available",
                     },
                 },
                 order_items: order.order_items.map((item) => ({
