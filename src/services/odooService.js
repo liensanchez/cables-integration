@@ -1,35 +1,111 @@
 // src/services/odooService.js
 const { call } = require("../utils/odooRpc");
 require("dotenv").config();
+const xmlrpc = require("xmlrpc");
 
 class OdooService {
     constructor() {
-        // If needed, add configuration here (e.g., session, auth)
+        this.modelsClient = xmlrpc.createClient({
+            url: `${process.env.ODOO_XMLRPC_URL}/xmlrpc/2/object`,
+        });
+        this.uid = null;
+        this.db = process.env.ODOO_DB;
+        this.password = process.env.ODOO_PASS;
     }
 
-    async getInventory() {
-        try {
-            const productIds = await call("product.product", "search", [
-                [["default_code", "!=", false]],
-            ]);
+    async authenticate() {
+        const commonClient = xmlrpc.createClient({
+            url: `${process.env.ODOO_XMLRPC_URL}/xmlrpc/2/common`,
+        });
 
-            if (!productIds.length) return [];
-
-            const products = await call("product.product", "read", [
-                productIds,
-                ["default_code", "qty_available"],
-            ]);
-
-            return products.map((prod) => ({
-                meliId: prod.default_code,
-                availableQuantity: prod.qty_available,
-            }));
-        } catch (err) {
-            console.error(
-                "❌ Failed to fetch inventory from Odoo:",
-                err.message
+        this.uid = await new Promise((resolve, reject) => {
+            commonClient.methodCall(
+                "authenticate",
+                [this.db, process.env.ODOO_USER, this.password, {}],
+                (err, value) => {
+                    if (err) return reject(err);
+                    resolve(value);
+                }
             );
-            throw err;
+        });
+        return this.uid;
+    }
+
+    async call(model, method, args = [], kwargs = {}) {
+        if (!this.uid) {
+            await this.authenticate();
+        }
+
+        return new Promise((resolve, reject) => {
+            this.modelsClient.methodCall(
+                "execute_kw",
+                [this.db, this.uid, this.password, model, method, args, kwargs],
+                (err, value) => {
+                    if (err) return reject(err);
+                    resolve(value);
+                }
+            );
+        });
+    }
+
+    async getInventory(testMode = false) {
+        try {
+            if (testMode) {
+                console.log(
+                    "⚠️ Running in test mode - returning mock inventory data"
+                );
+                return [
+                    { meliId: "TEST001", availableQuantity: 10 },
+                    { meliId: "TEST002", availableQuantity: 5 },
+                    { meliId: "TEST003", availableQuantity: 0 },
+                ];
+            }
+
+            console.log("🔍 Attempting to fetch inventory from Odoo...");
+
+            // Try the most common model names
+            const modelsToTry = ["product.product", "product.template"];
+
+            for (const model of modelsToTry) {
+                try {
+                    // Verify model exists
+                    await this.call(model, "fields_get", [], {});
+
+                    // Get products
+                    const productIds = await this.call(model, "search", [
+                        [["default_code", "!=", false]],
+                    ]);
+
+                    if (!productIds.length) return [];
+
+                    const products = await this.call(model, "read", [
+                        productIds,
+                        ["default_code", "qty_available"],
+                    ]);
+
+                    const inventory = products
+                        .filter((prod) => prod.default_code)
+                        .map((prod) => ({
+                            meliId: prod.default_code,
+                            availableQuantity: Number(prod.qty_available) || 0,
+                        }));
+
+                    console.log(
+                        `✅ Successfully fetched ${inventory.length} items using model: ${model}`
+                    );
+                    return inventory;
+                } catch (err) {
+                    console.log(`⚠️ Model ${model} failed, trying next...`);
+                    continue;
+                }
+            }
+
+            throw new Error(
+                `No valid product model found. Tried: ${modelsToTry.join(", ")}`
+            );
+        } catch (err) {
+            console.error("❌ Critical error fetching inventory:", err);
+            throw new Error(`Inventory fetch failed: ${err.message}`);
         }
     }
 
