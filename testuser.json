@@ -1,0 +1,50 @@
+[
+    {
+        "id": 2465484110,
+        "email": "test_user_1543645064@testuser.com",
+        "nickname": "TESTUSER1543645064",
+        "site_status": "active",
+        "password": "luWJATE3a8",
+        "simulated": {
+            "email": "test_user_1543645064@testuser.com",
+            "phone": {
+                "number": "5555555555",
+                "area_code": "55",
+                "extension": null,
+                "verified": true
+            },
+            "address": {
+                "street_name": "Avenida Reforma",
+                "street_number": "123",
+                "city": "Ciudad de México",
+                "zip_code": "11100",
+                "state": "Ciudad de México",
+                "country": "México"
+            }
+        }
+    },
+    {
+        "id": 2465484112,
+        "email": "test_user_761404816@testuser.com",
+        "nickname": "TESTUSER761404816",
+        "site_status": "active",
+        "password": "OmZXfLlTrW",
+        "simulated": {
+            "email": "test_user_761404816@testuser.com",
+            "phone": {
+                "number": "5555555555",
+                "area_code": "55",
+                "extension": null,
+                "verified": true
+            },
+            "address": {
+                "street_name": "Avenida Reforma",
+                "street_number": "123",
+                "city": "Ciudad de México",
+                "zip_code": "11100",
+                "state": "Ciudad de México",
+                "country": "México"
+            }
+        }
+    }
+]

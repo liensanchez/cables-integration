@@ -224,7 +224,7 @@ class MeliAPI {
             throw error;
         }
     }
-
+    /* 
     // fetch single user's orders
     async getSingleOrder(orderId) {
         try {
@@ -291,7 +291,8 @@ class MeliAPI {
                     identification: {
                         type: order.buyer.identification?.type || "ID",
                         number:
-                            order.buyer.identification?.number || "No available",
+                            order.buyer.identification?.number ||
+                            "No available",
                     },
                 },
                 shipping_info: {
@@ -313,7 +314,8 @@ class MeliAPI {
                     identification: {
                         type: order.buyer.identification?.type || "ID",
                         number:
-                            order.buyer.identification?.number || "No available",
+                            order.buyer.identification?.number ||
+                            "No available",
                     },
                 },
                 order_items: order.order_items.map((item) => ({
@@ -342,7 +344,143 @@ class MeliAPI {
             throw error;
         }
     }
+ */
+    async getSingleOrder(orderId) {
+        try {
+            if (!this.token) {
+                throw new Error("No access token available");
+            }
 
+            console.log(`Fetching order with ID: ${orderId}`);
+
+            // Obtener la orden
+            const orderResponse = await axios.get(
+                `${this.baseUrl}/orders/${orderId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+            const order = orderResponse.data;
+
+            console.log(
+                `Order retrieved successfully: ${JSON.stringify(order)}`
+            );
+
+            if (!order.shipping || !order.shipping.id) {
+                throw new Error("Shipping ID is missing or invalid");
+            }
+
+            console.log(
+                `Fetching shipping details for shipping ID: ${order.shipping.id}`
+            );
+
+            // Obtener información de envío
+            const shippingResponse = await axios.get(
+                `${this.baseUrl}/shipments/${order.shipping.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+            const shipping = shippingResponse.data;
+
+            console.log(
+                `Shipping details retrieved successfully: ${JSON.stringify(shipping)}`
+            );
+
+            const receiverAddress = shipping.receiver_address;
+
+            const fullShippingAddress = [
+                receiverAddress.street_name,
+                receiverAddress.street_number,
+                receiverAddress.comment,
+                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
+            ]
+                .filter(Boolean)
+                .join(" - ");
+
+            const fullBillingAddress = [
+                receiverAddress.street_name,
+                receiverAddress.street_number,
+                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
+            ]
+                .filter(Boolean)
+                .join(" - ");
+
+            const logisticType = shipping.logistic_type || null;
+
+            return {
+                id: order.id,
+                status: order.status,
+                date_created: order.date_created,
+                total_amount: order.total_amount,
+                currency: order.currency_id,
+                buyer: {
+                    id: order.buyer.id,
+                    nickname: order.buyer.nickname,
+                    email: order.buyer.email,
+                    phone: order.buyer.phone?.number || null,
+                    first_name: order.buyer.first_name,
+                    last_name: order.buyer.last_name,
+                    identification: {
+                        type: order.buyer.identification?.type || "ID",
+                        number:
+                            order.buyer.identification?.number ||
+                            "No available",
+                    },
+                },
+                shipping_info: {
+                    receiver_name: receiverAddress.receiver_name,
+                    receiver_phone: receiverAddress.receiver_phone,
+                    address: fullShippingAddress,
+                    shipping_type: shipping.shipping_type,
+                    shipping_cost: shipping.cost,
+                    shipping_mode: shipping.shipping_mode,
+                    shipping_status: shipping.status,
+                    logistic_type: logisticType,
+                    is_fulfillment: logisticType === "fulfillment",
+                },
+                billing_info: {
+                    tax_payer_type:
+                        order.buyer.tax_payer_type || "Consumidor Final",
+                    address: fullBillingAddress,
+                    buyer_name: `${order.buyer.first_name} ${order.buyer.last_name}`,
+                    identification: {
+                        type: order.buyer.identification?.type || "ID",
+                        number:
+                            order.buyer.identification?.number ||
+                            "No available",
+                    },
+                },
+                order_items: order.order_items.map((item) => ({
+                    sku: item.item.seller_sku,
+                    title: item.item.title,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    currency: item.currency_id,
+                })),
+                payments: order.payments.map((payment) => ({
+                    id: payment.id,
+                    payment_method: payment.payment_method_id,
+                    status: payment.status,
+                    status_detail: payment.status_detail,
+                    total_paid: payment.total_paid_amount,
+                    installments: payment.installments,
+                    installment_amount: payment.transaction_amount,
+                    date_approved: payment.date_approved,
+                })),
+            };
+        } catch (error) {
+            console.error(
+                "❌ Failed to get single order:",
+                error.response?.data || error.message
+            );
+            throw error;
+        }
+    }
     // fetch single user's buyer info
     async getBuyerInfo(buyerId) {
         try {
@@ -372,7 +510,7 @@ class MeliAPI {
     //For testing purposes
     async createFullTestUser() {
         try {
-            // Si no tenés accessToken, pedilo dentro del método:
+            // If you don't have an access token, request one within the method:
             if (!this.accessToken) {
                 const payload = new URLSearchParams({
                     grant_type: "client_credentials",
@@ -396,10 +534,10 @@ class MeliAPI {
                 );
             }
 
-            // Ahora sí hacés la llamada para crear usuario de prueba
+            // Now make the call to create a test user
             const userResponse = await axios.post(
                 `${this.baseUrl}/users/test_user`,
-                { site_id: "MLA" },
+                { site_id: "MLM" }, // Use MLM for Mexico
                 {
                     headers: { "Content-Type": "application/json" },
                     params: {
@@ -411,24 +549,24 @@ class MeliAPI {
             const testUser = userResponse.data;
             console.log("✅ Test user created:", testUser.nickname);
 
-            // Simulación de datos adicionales
+            // Simulate additional profile data for a Mexican user
             const simulatedProfile = {
                 ...testUser,
                 simulated: {
                     email: testUser.email,
                     phone: {
-                        number: "123456789",
-                        area_code: "11",
+                        number: "5555555555",
+                        area_code: "55",
                         extension: null,
                         verified: true,
                     },
                     address: {
-                        street_name: "Av. Siempre Viva",
-                        street_number: "742",
-                        city: "Springfield",
-                        zip_code: "1234",
-                        state: "Buenos Aires",
-                        country: "Argentina",
+                        street_name: "Avenida Reforma",
+                        street_number: "123",
+                        city: "Ciudad de México",
+                        zip_code: "11100",
+                        state: "Ciudad de México",
+                        country: "México",
                     },
                 },
             };

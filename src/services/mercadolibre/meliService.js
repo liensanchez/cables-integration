@@ -118,6 +118,13 @@ class MercadoLibreService {
                 },
             };
 
+            // Ensure no placeholder values are used
+            completeOrder.buyer.phone = completeOrder.buyer.phone || null;
+            completeOrder.buyer.address = completeOrder.buyer.address || null;
+            completeOrder.buyer.city = completeOrder.buyer.city || null;
+            completeOrder.buyer.state = completeOrder.buyer.state || null;
+            completeOrder.buyer.zip_code = completeOrder.buyer.zip_code || null;
+
             // 4. Check if order exists in database
             const existing = await MeliOrder.findOne({
                 orderId: completeOrder.id,
@@ -176,20 +183,20 @@ class MercadoLibreService {
             return {
                 id: buyer.id,
                 nickname: buyer.nickname,
-                email: buyer.email,
-                first_name: buyer.first_name,
-                last_name: buyer.last_name,
-                phone: buyer.phone?.number || 1111111111,
-                address: buyer.address?.address || 1111111111,
-                city: buyer.address?.city || 1111111111,
-                state: buyer.address?.state || 1111111111,
-                zip_code: buyer.address?.zip_code || 1111111111,
-                registration_date: buyer.registration_date,
-                user_type: buyer.user_type,
-                points: buyer.points,
-                site_id: buyer.site_id,
-                permalink: buyer.permalink,
-                status: buyer.status,
+                email: buyer.email || null,
+                first_name: buyer.first_name || null,
+                last_name: buyer.last_name || null,
+                phone: buyer.phone?.number || null,
+                address: buyer.address?.address || null,
+                city: buyer.address?.city || null,
+                state: buyer.address?.state || null,
+                zip_code: buyer.address?.zip_code || null,
+                registration_date: buyer.registration_date || null,
+                user_type: buyer.user_type || null,
+                points: buyer.points || null,
+                site_id: buyer.site_id || null,
+                permalink: buyer.permalink || null,
+                status: buyer.status || null,
             };
         } catch (err) {
             console.error("Error fetching buyer info:", err);

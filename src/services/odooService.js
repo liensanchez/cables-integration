@@ -156,7 +156,7 @@ class OdooService {
         }
         return results;
     }
-
+    /* 
     async createOrUpdatePartner(order) {
         const partnerName =
             order.buyer?.first_name && order.buyer?.last_name
@@ -169,26 +169,28 @@ class OdooService {
         const email = order.buyer?.email;
 
         if (dni) {
-            partnerIds = await call("res.partner", "search", [
+            partnerIds = await this.call("res.partner", "search", [
                 [["vat", "=", dni]],
             ]);
         }
 
         if (!partnerIds.length && email) {
-            partnerIds = await call("res.partner", "search", [
+            partnerIds = await this.call("res.partner", "search", [
                 [["email", "=", email]],
             ]);
         }
 
         // Asegurar que exista la categoría "MercadoLibre"
-        let categoryIds = await call("res.partner.category", "search", [
+        let categoryIds = await this.call("res.partner.category", "search", [
             [["name", "=", "MercadoLibre"]],
         ]);
 
         if (!categoryIds.length) {
-            const categoryId = await call("res.partner.category", "create", [
-                { name: "MercadoLibre" },
-            ]);
+            const categoryId = await this.call(
+                "res.partner.category",
+                "create",
+                [{ name: "MercadoLibre" }]
+            );
             categoryIds = [categoryId];
         }
 
@@ -212,7 +214,7 @@ class OdooService {
 
         // Buscar ID de provincia en Odoo si existe
         if (stateName) {
-            const states = await call("res.country.state", "search_read", [
+            const states = await this.call("res.country.state", "search_read", [
                 [["name", "ilike", stateName]],
                 ["id"],
             ]);
@@ -239,10 +241,127 @@ class OdooService {
             console.log(
                 `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
             );
-            await call("res.partner", "write", [[partnerIds[0]], partnerData]);
+            await this.call("res.partner", "write", [
+                [partnerIds[0]],
+                partnerData,
+            ]);
             return partnerIds[0];
         } else {
-            const newPartnerId = await call("res.partner", "create", [
+            const newPartnerId = await this.call("res.partner", "create", [
+                partnerData,
+            ]);
+            console.log(
+                `✅ Created new partner ID ${newPartnerId} for order ${order.id}`
+            );
+            return newPartnerId;
+        }
+    } */
+    async createOrUpdatePartner(order) {
+        const partnerName =
+            order.buyer?.first_name && order.buyer?.last_name
+                ? `${order.buyer.first_name} ${order.buyer.last_name}`
+                : order.buyer?.nickname || "MercadoLibre Buyer";
+
+        // Buscar cliente por DNI
+        let partnerIds = [];
+        const dni = order.buyer?.identification?.number;
+        const email = order.buyer?.email;
+
+        if (dni) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["vat", "=", dni]],
+            ]);
+        }
+
+        if (!partnerIds.length && email) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["email", "=", email]],
+            ]);
+        }
+
+        // Asegurar que exista la categoría "MercadoLibre"
+        let categoryIds = await this.call("res.partner.category", "search", [
+            [["name", "=", "MercadoLibre"]],
+        ]);
+
+        if (!categoryIds.length) {
+            const categoryId = await this.call(
+                "res.partner.category",
+                "create",
+                [{ name: "MercadoLibre" }]
+            );
+            categoryIds = [categoryId];
+        }
+
+        // Normalizar dirección
+        const rawAddress =
+            order.billing_info?.address || order.shipping_info?.address || "";
+        let street = "",
+            zip = "",
+            city = "",
+            stateName = "",
+            stateId = null;
+
+        if (rawAddress) {
+            const parts = rawAddress.split("-");
+            street = parts[0]?.trim() + (parts[1] ? ` ${parts[1].trim()}` : "");
+            zip = parts[2]?.trim() || "";
+            city = parts[3]?.trim() || "";
+            const lastPart = parts[4] || "";
+            stateName = lastPart.split(",")[1]?.trim() || lastPart.trim();
+        }
+
+        // Buscar ID de provincia en Odoo si existe
+        if (stateName) {
+            const states = await this.call("res.country.state", "search_read", [
+                [["name", "ilike", stateName]],
+                ["id"],
+            ]);
+            if (states.length) {
+                stateId = states[0].id;
+            }
+        }
+
+        // Handle VAT number format
+        let vat = dni || "";
+        if (vat && vat !== "NOAVAILABLE") {
+            // Ensure VAT number is in the correct format 'CC##'
+            vat = vat.toUpperCase(); // Convert to uppercase
+            if (!vat.match(/^[A-Z]{2}\d+$/)) {
+                console.warn(
+                    `VAT number ${vat} is not in the correct format. Expected format: CC##`
+                );
+                vat = ""; // Clear VAT if it's not in the correct format
+            }
+        } else {
+            vat = ""; // Clear VAT if it's not available
+        }
+
+        const partnerData = {
+            name: partnerName,
+            email: email || `${order.id}@meli.local`,
+            phone:
+                order.buyer?.phone || order.shipping_info?.receiver_phone || "",
+            vat: vat,
+            street,
+            zip,
+            city,
+            state_id: stateId || undefined,
+            category_id: [[6, false, categoryIds]],
+            comment: `MercadoLibre Buyer\nID: ${order.buyer?.id || ""}\nType: ${order.buyer?.identification?.type || ""}`,
+        };
+
+        if (partnerIds.length) {
+            console.log(
+                `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
+            );
+            await this.call("res.partner", "write", [
+                [partnerIds[0]],
+                partnerData,
+            ]);
+            return partnerIds[0];
+        } else {
+            const newPartnerId = await this.call("res.partner", "create", [
                 partnerData,
             ]);
             console.log(
@@ -257,7 +376,7 @@ class OdooService {
 
         // Buscar el almacén correcto según fulfillment
         const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
-        const warehouses = await call("stock.warehouse", "search_read", [
+        const warehouses = await this.call("stock.warehouse", "search_read", [
             warehouseDomain,
             ["id", "lot_stock_id"],
         ]);
@@ -277,7 +396,7 @@ class OdooService {
             `Shipping: ${order.shipping?.address || ""}\n` +
             `Receiver: ${order.shipping?.receiver_name || ""}`;
 
-        const saleOrderId = await call("sale.order", "create", [
+        const saleOrderId = await this.call("sale.order", "create", [
             {
                 partner_id: partnerId,
                 partner_invoice_id: partnerId,
@@ -295,7 +414,7 @@ class OdooService {
         ]);
 
         if (order.payments?.[0]?.status === "approved") {
-            await call("sale.order", "action_confirm", [[saleOrderId]]);
+            await this.call("sale.order", "action_confirm", [[saleOrderId]]);
         }
 
         return saleOrderId;
@@ -303,12 +422,12 @@ class OdooService {
 
     async addOrderItems(order, saleOrderId) {
         for (const item of order.order_items) {
-            const productIds = await call("product.product", "search", [
+            const productIds = await this.call("product.product", "search", [
                 [["default_code", "=", item.sku]],
             ]);
 
             if (productIds.length) {
-                await call("sale.order.line", "create", [
+                await this.call("sale.order.line", "create", [
                     {
                         order_id: saleOrderId,
                         product_id: productIds[0],
