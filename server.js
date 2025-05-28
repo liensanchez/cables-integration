@@ -30,7 +30,7 @@ const odooService = require('./src/services/odooService');
 const odooSer = new odooService();
 
 app.use('/api/meli', require('./src/routes/meliRoutes')(meliService));
-app.use('/api/sync', require('./src/routes/routes.js')(odooSer, meliService));
+app.use('/api/sync', require('./src/routes/odooRoutes.js')(odooSer, meliService));
 
 
 /* const AmazonService = require('./src/services/amazon/amazonService'); */

@@ -25,6 +25,15 @@ module.exports = (odooSer, meliService) => {
         }
     });
 
+    router.get("/odoo-version", async (req, res, next) => {
+        try {
+            const version = await odooSer.getVersion();
+            res.json({ version });
+        } catch (err) {
+            next(err);
+        }
+    });
+
     // In your route.js
     router.get("/odoo-connection-test", async (req, res, next) => {
         try {

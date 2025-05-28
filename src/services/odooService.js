@@ -13,6 +13,19 @@ class OdooService {
         this.password = process.env.ODOO_PASS;
     }
 
+    async getVersion() {
+        const commonClient = xmlrpc.createClient({
+            url: `${process.env.ODOO_XMLRPC_URL}/xmlrpc/2/common`,
+        });
+
+        return new Promise((resolve, reject) => {
+            commonClient.methodCall("version", [], (err, value) => {
+                if (err) return reject(err);
+                resolve(value);
+            });
+        });
+    }
+
     async authenticate() {
         const commonClient = xmlrpc.createClient({
             url: `${process.env.ODOO_XMLRPC_URL}/xmlrpc/2/common`,
