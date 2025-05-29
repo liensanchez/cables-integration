@@ -156,31 +156,42 @@ class OdooService {
         }
         return results;
     }
-    /* 
+
     async createOrUpdatePartner(order) {
         const partnerName =
             order.buyer?.first_name && order.buyer?.last_name
                 ? `${order.buyer.first_name} ${order.buyer.last_name}`
                 : order.buyer?.nickname || "MercadoLibre Buyer";
 
-        // Buscar cliente por DNI
-        let partnerIds = [];
-        const dni = order.buyer?.identification?.number;
-        const email = order.buyer?.email;
+        // Normalize and prepare buyer information
+        const email = (order.buyer?.email || "").trim().toLowerCase();
+        const phone = (order.buyer?.phone || "").trim();
+        const vat = (order.buyer?.identification?.number || "")
+            .trim()
+            .toUpperCase();
+        const fallbackEmail = `${order.id}@meli.local`;
 
-        if (dni) {
+        // Search for existing partner by VAT, email, or phone
+        let partnerIds = [];
+        if (vat) {
             partnerIds = await this.call("res.partner", "search", [
-                [["vat", "=", dni]],
+                [["vat", "=", vat]],
             ]);
         }
 
         if (!partnerIds.length && email) {
             partnerIds = await this.call("res.partner", "search", [
-                [["email", "=", email]],
+                [["email", "=ilike", email]],
             ]);
         }
 
-        // Asegurar que exista la categoría "MercadoLibre"
+        if (!partnerIds.length && phone) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["phone", "=", phone]],
+            ]);
+        }
+
+        // Ensure the "MercadoLibre" category exists
         let categoryIds = await this.call("res.partner.category", "search", [
             [["name", "=", "MercadoLibre"]],
         ]);
@@ -194,7 +205,7 @@ class OdooService {
             categoryIds = [categoryId];
         }
 
-        // Normalizar dirección
+        // Prepare address information
         const rawAddress =
             order.billing_info?.address || order.shipping_info?.address || "";
         let street = "",
@@ -212,7 +223,6 @@ class OdooService {
             stateName = lastPart.split(",")[1]?.trim() || lastPart.trim();
         }
 
-        // Buscar ID de provincia en Odoo si existe
         if (stateName) {
             const states = await this.call("res.country.state", "search_read", [
                 [["name", "ilike", stateName]],
@@ -223,12 +233,12 @@ class OdooService {
             }
         }
 
+        // Prepare partner data
         const partnerData = {
             name: partnerName,
-            email: email || `${order.id}@meli.local`,
-            phone:
-                order.buyer?.phone || order.shipping_info?.receiver_phone || "",
-            vat: dni || "",
+            email: email || fallbackEmail,
+            phone: phone || order.shipping_info?.receiver_phone || "",
+            vat: vat || "",
             street,
             zip,
             city,
@@ -237,120 +247,7 @@ class OdooService {
             comment: `MercadoLibre Buyer\nID: ${order.buyer?.id || ""}\nType: ${order.buyer?.identification?.type || ""}`,
         };
 
-        if (partnerIds.length) {
-            console.log(
-                `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
-            );
-            await this.call("res.partner", "write", [
-                [partnerIds[0]],
-                partnerData,
-            ]);
-            return partnerIds[0];
-        } else {
-            const newPartnerId = await this.call("res.partner", "create", [
-                partnerData,
-            ]);
-            console.log(
-                `✅ Created new partner ID ${newPartnerId} for order ${order.id}`
-            );
-            return newPartnerId;
-        }
-    } */
-    async createOrUpdatePartner(order) {
-        const partnerName =
-            order.buyer?.first_name && order.buyer?.last_name
-                ? `${order.buyer.first_name} ${order.buyer.last_name}`
-                : order.buyer?.nickname || "MercadoLibre Buyer";
-
-        // Buscar cliente por DNI
-        let partnerIds = [];
-        const dni = order.buyer?.identification?.number;
-        const email = order.buyer?.email;
-
-        if (dni) {
-            partnerIds = await this.call("res.partner", "search", [
-                [["vat", "=", dni]],
-            ]);
-        }
-
-        if (!partnerIds.length && email) {
-            partnerIds = await this.call("res.partner", "search", [
-                [["email", "=", email]],
-            ]);
-        }
-
-        // Asegurar que exista la categoría "MercadoLibre"
-        let categoryIds = await this.call("res.partner.category", "search", [
-            [["name", "=", "MercadoLibre"]],
-        ]);
-
-        if (!categoryIds.length) {
-            const categoryId = await this.call(
-                "res.partner.category",
-                "create",
-                [{ name: "MercadoLibre" }]
-            );
-            categoryIds = [categoryId];
-        }
-
-        // Normalizar dirección
-        const rawAddress =
-            order.billing_info?.address || order.shipping_info?.address || "";
-        let street = "",
-            zip = "",
-            city = "",
-            stateName = "",
-            stateId = null;
-
-        if (rawAddress) {
-            const parts = rawAddress.split("-");
-            street = parts[0]?.trim() + (parts[1] ? ` ${parts[1].trim()}` : "");
-            zip = parts[2]?.trim() || "";
-            city = parts[3]?.trim() || "";
-            const lastPart = parts[4] || "";
-            stateName = lastPart.split(",")[1]?.trim() || lastPart.trim();
-        }
-
-        // Buscar ID de provincia en Odoo si existe
-        if (stateName) {
-            const states = await this.call("res.country.state", "search_read", [
-                [["name", "ilike", stateName]],
-                ["id"],
-            ]);
-            if (states.length) {
-                stateId = states[0].id;
-            }
-        }
-
-        // Handle VAT number format
-        let vat = dni || "";
-        if (vat && vat !== "NOAVAILABLE") {
-            // Ensure VAT number is in the correct format 'CC##'
-            vat = vat.toUpperCase(); // Convert to uppercase
-            if (!vat.match(/^[A-Z]{2}\d+$/)) {
-                console.warn(
-                    `VAT number ${vat} is not in the correct format. Expected format: CC##`
-                );
-                vat = ""; // Clear VAT if it's not in the correct format
-            }
-        } else {
-            vat = ""; // Clear VAT if it's not available
-        }
-
-        const partnerData = {
-            name: partnerName,
-            email: email || `${order.id}@meli.local`,
-            phone:
-                order.buyer?.phone || order.shipping_info?.receiver_phone || "",
-            vat: vat,
-            street,
-            zip,
-            city,
-            state_id: stateId || undefined,
-            category_id: [[6, false, categoryIds]],
-            comment: `MercadoLibre Buyer\nID: ${order.buyer?.id || ""}\nType: ${order.buyer?.identification?.type || ""}`,
-        };
-
+        // Update or create partner
         if (partnerIds.length) {
             console.log(
                 `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
@@ -370,7 +267,6 @@ class OdooService {
             return newPartnerId;
         }
     }
-
     async createSalesOrder(order, partnerId) {
         const isFulfillment = order.is_fulfillment === true;
 
