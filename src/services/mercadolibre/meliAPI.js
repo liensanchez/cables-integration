@@ -1,5 +1,7 @@
 // src/services/mercadolibre/meliAPI.js
 const axios = require("axios");
+const fs = require('fs');
+const path = require('path');
 const qs = require("qs");
 require("dotenv").config();
 
@@ -249,7 +251,20 @@ class MeliAPI {
             );
 
             if (!order.shipping || !order.shipping.id) {
-                throw new Error("Shipping ID is missing or invalid");
+                const logMessage = `⚠️ [${new Date().toISOString()}] No shipping information found for order ID: ${orderId}\n`;
+
+                const logFilePath = path.join(
+                    __dirname,
+                    "shipping_warnings.log"
+                );
+
+                fs.appendFile(logFilePath, logMessage, (err) => {
+                    if (err) {
+                        console.error("❌ Failed to write to log file:", err);
+                    }
+                });
+
+                // Continue execution — no exception thrown
             }
 
             console.log(
@@ -361,7 +376,7 @@ class MeliAPI {
             throw error;
         }
     }
-    
+
     // fetch single user's buyer info
     async getBuyerInfo(buyerId) {
         try {
