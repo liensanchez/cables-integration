@@ -174,36 +174,40 @@ class OdooService {
         // Validate VAT format
         let vatFormatted = vat;
         if (vatFormatted && vatFormatted !== "NOAVAILABLE") {
-            // Ensure VAT number is in the correct format 'CC##'
-            vatFormatted = vatFormatted.toUpperCase(); // Convert to uppercase
             if (!vatFormatted.match(/^[A-Z]{2}\d+$/)) {
                 console.warn(
                     `VAT number ${vatFormatted} is not in the correct format. Expected format: CC##. Clearing VAT number.`
                 );
-                vatFormatted = false; // Clear VAT if it's not in the correct format
+                vatFormatted = false;
             }
         } else {
-            vatFormatted = false; // Clear VAT if it's not available or is 'NOAVAILABLE'
+            vatFormatted = false;
         }
 
-        // Search for existing partner by VAT, email, or phone
-        let partnerIds = [];
-        if (vatFormatted) {
-            partnerIds = await this.call("res.partner", "search", [
-                [["vat", "=", vatFormatted]],
-            ]);
-        }
+        // FIRST search by name (most important check to prevent duplicates)
+        let partnerIds = await this.call("res.partner", "search", [
+            [["name", "=ilike", partnerName]],
+        ]);
 
-        if (!partnerIds.length && email) {
-            partnerIds = await this.call("res.partner", "search", [
-                [["email", "=ilike", email]],
-            ]);
-        }
+        // If no match by name, try other identifiers
+        if (!partnerIds.length) {
+            if (vatFormatted) {
+                partnerIds = await this.call("res.partner", "search", [
+                    [["vat", "=", vatFormatted]],
+                ]);
+            }
 
-        if (!partnerIds.length && phone) {
-            partnerIds = await this.call("res.partner", "search", [
-                [["phone", "=", phone]],
-            ]);
+            if (!partnerIds.length && email) {
+                partnerIds = await this.call("res.partner", "search", [
+                    [["email", "=ilike", email]],
+                ]);
+            }
+
+            if (!partnerIds.length && phone) {
+                partnerIds = await this.call("res.partner", "search", [
+                    [["phone", "=", phone]],
+                ]);
+            }
         }
 
         // Ensure the "MercadoLibre" category exists
@@ -253,7 +257,7 @@ class OdooService {
             name: partnerName,
             email: email || fallbackEmail,
             phone: phone || order.shipping_info?.receiver_phone || "",
-            vat: vatFormatted || "", // Use the validated VAT number or an empty string
+            vat: vatFormatted || "",
             street,
             zip,
             city,
@@ -264,13 +268,33 @@ class OdooService {
 
         // Update or create partner
         if (partnerIds.length) {
-            console.log(
-                `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
-            );
-            await this.call("res.partner", "write", [
-                [partnerIds[0]],
-                partnerData,
+            // Check if we need to update any missing information
+            const existingPartner = await this.call("res.partner", "read", [
+                partnerIds[0],
+                Object.keys(partnerData),
             ]);
+
+            let needsUpdate = false;
+            for (const key in partnerData) {
+                if (
+                    partnerData[key] &&
+                    (!existingPartner[key] ||
+                        existingPartner[key] !== partnerData[key])
+                ) {
+                    needsUpdate = true;
+                    break;
+                }
+            }
+
+            if (needsUpdate) {
+                console.log(
+                    `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
+                );
+                await this.call("res.partner", "write", [
+                    [partnerIds[0]],
+                    partnerData,
+                ]);
+            }
             return partnerIds[0];
         } else {
             const newPartnerId = await this.call("res.partner", "create", [
@@ -282,6 +306,7 @@ class OdooService {
             return newPartnerId;
         }
     }
+
     async createSalesOrder(order, partnerId) {
         const isFulfillment = order.is_fulfillment === true;
 
