@@ -171,11 +171,26 @@ class OdooService {
             .toUpperCase();
         const fallbackEmail = `${order.id}@meli.local`;
 
+        // Validate VAT format
+        let vatFormatted = vat;
+        if (vatFormatted && vatFormatted !== "NOAVAILABLE") {
+            // Ensure VAT number is in the correct format 'CC##'
+            vatFormatted = vatFormatted.toUpperCase(); // Convert to uppercase
+            if (!vatFormatted.match(/^[A-Z]{2}\d+$/)) {
+                console.warn(
+                    `VAT number ${vatFormatted} is not in the correct format. Expected format: CC##. Clearing VAT number.`
+                );
+                vatFormatted = false; // Clear VAT if it's not in the correct format
+            }
+        } else {
+            vatFormatted = false; // Clear VAT if it's not available or is 'NOAVAILABLE'
+        }
+
         // Search for existing partner by VAT, email, or phone
         let partnerIds = [];
-        if (vat) {
+        if (vatFormatted) {
             partnerIds = await this.call("res.partner", "search", [
-                [["vat", "=", vat]],
+                [["vat", "=", vatFormatted]],
             ]);
         }
 
@@ -238,7 +253,7 @@ class OdooService {
             name: partnerName,
             email: email || fallbackEmail,
             phone: phone || order.shipping_info?.receiver_phone || "",
-            vat: vat || "",
+            vat: vatFormatted || "", // Use the validated VAT number or an empty string
             street,
             zip,
             city,
