@@ -224,127 +224,7 @@ class MeliAPI {
             throw error;
         }
     }
-    /* 
-    // fetch single user's orders
-    async getSingleOrder(orderId) {
-        try {
-            if (!this.token) {
-                throw new Error("No access token available");
-            }
 
-            // Obtener la orden
-            const orderResponse = await axios.get(
-                `${this.baseUrl}/orders/${orderId}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${this.token}`,
-                    },
-                }
-            );
-            const order = orderResponse.data;
-
-            // Obtener información de envío
-            const shippingResponse = await axios.get(
-                `${this.baseUrl}/shipments/${order.shipping.id}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${this.token}`,
-                    },
-                }
-            );
-            const shipping = shippingResponse.data;
-
-            const receiverAddress = shipping.receiver_address;
-
-            const fullShippingAddress = [
-                receiverAddress.street_name,
-                receiverAddress.street_number,
-                receiverAddress.comment,
-                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
-            ]
-                .filter(Boolean)
-                .join(" - ");
-
-            const fullBillingAddress = [
-                receiverAddress.street_name,
-                receiverAddress.street_number,
-                `${receiverAddress.zip_code} - ${receiverAddress.city.name}, ${receiverAddress.state.name}`,
-            ]
-                .filter(Boolean)
-                .join(" - ");
-
-            const logisticType = shipping.logistic_type || null;
-
-            return {
-                id: order.id,
-                status: order.status,
-                date_created: order.date_created,
-                total_amount: order.total_amount,
-                currency: order.currency_id,
-                buyer: {
-                    id: order.buyer.id,
-                    nickname: order.buyer.nickname,
-                    email: order.buyer.email,
-                    phone: order.buyer.phone?.number || null,
-                    first_name: order.buyer.first_name,
-                    last_name: order.buyer.last_name,
-                    identification: {
-                        type: order.buyer.identification?.type || "ID",
-                        number:
-                            order.buyer.identification?.number ||
-                            "No available",
-                    },
-                },
-                shipping_info: {
-                    receiver_name: receiverAddress.receiver_name,
-                    receiver_phone: receiverAddress.receiver_phone,
-                    address: fullShippingAddress,
-                    shipping_type: shipping.shipping_type,
-                    shipping_cost: shipping.cost,
-                    shipping_mode: shipping.shipping_mode,
-                    shipping_status: shipping.status,
-                    logistic_type: logisticType,
-                    is_fulfillment: logisticType === "fulfillment",
-                },
-                billing_info: {
-                    tax_payer_type:
-                        order.buyer.tax_payer_type || "Consumidor Final",
-                    address: fullBillingAddress,
-                    buyer_name: `${order.buyer.first_name} ${order.buyer.last_name}`,
-                    identification: {
-                        type: order.buyer.identification?.type || "ID",
-                        number:
-                            order.buyer.identification?.number ||
-                            "No available",
-                    },
-                },
-                order_items: order.order_items.map((item) => ({
-                    sku: item.item.seller_sku,
-                    title: item.item.title,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    currency: item.currency_id,
-                })),
-                payments: order.payments.map((payment) => ({
-                    id: payment.id,
-                    payment_method: payment.payment_method_id,
-                    status: payment.status,
-                    status_detail: payment.status_detail,
-                    total_paid: payment.total_paid_amount,
-                    installments: payment.installments,
-                    installment_amount: payment.transaction_amount,
-                    date_approved: payment.date_approved,
-                })),
-            };
-        } catch (error) {
-            console.error(
-                "❌ Failed to get single order:",
-                error.response?.data || error.message
-            );
-            throw error;
-        }
-    }
- */
     async getSingleOrder(orderId) {
         try {
             if (!this.token) {
@@ -481,6 +361,7 @@ class MeliAPI {
             throw error;
         }
     }
+    
     // fetch single user's buyer info
     async getBuyerInfo(buyerId) {
         try {

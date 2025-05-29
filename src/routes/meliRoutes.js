@@ -2,6 +2,20 @@
 const express = require("express");
 const router = express.Router();
 
+const processingLocks = new Map();
+const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes lock duration
+
+// Cleanup function to remove expired locks
+setInterval(() => {
+    const now = Date.now();
+    for (const [orderId, timestamp] of processingLocks.entries()) {
+        if (now - timestamp > LOCK_TIMEOUT_MS) {
+            processingLocks.delete(orderId);
+            console.log(`♻️ Cleared expired lock for order ${orderId}`);
+        }
+    }
+}, 60 * 1000); // Run cleanup every minute
+
 module.exports = (meliService) => {
     // route to get the auth
     router.get("/auth/user", async (req, res, next) => {
@@ -80,15 +94,44 @@ module.exports = (meliService) => {
                 body.resource.includes("/orders/")
             ) {
                 const orderId = body.resource.split("/orders/")[1];
+                const now = Date.now();
 
+                // Check for existing lock (regardless of age)
+                if (processingLocks.has(orderId)) {
+                    const lockTime = processingLocks.get(orderId);
+                    console.log(
+                        `⏳ Order ${orderId} is locked (since ${new Date(lockTime).toISOString()}), skipping. ` +
+                            `Will expire at ${new Date(lockTime + LOCK_TIMEOUT_MS).toISOString()}`
+                    );
+                    return res.status(200).send("OK - Already processing");
+                }
+
+                // Set new lock with current timestamp
+                processingLocks.set(orderId, now);
                 console.log(
-                    `🔍 Processing order notification for ID: ${orderId}`
+                    `🔒 Lock set for order ${orderId} at ${new Date(now).toISOString()}`
                 );
 
-                const order = await meliService.getSingleOrder(orderId);
-                console.log(
-                    `✅ Processed order ${orderId} for buyer ${order.buyer?.nickname}`
-                );
+                try {
+                    console.log(
+                        `🔍 Processing order notification for ID: ${orderId}`
+                    );
+                    const order = await meliService.getSingleOrder(orderId);
+                    console.log(
+                        `✅ Processed order ${orderId} for buyer ${order.buyer?.nickname}`
+                    );
+                } catch (err) {
+                    console.error(`❌ Error processing order ${orderId}:`, err);
+                    // For non-permanent errors, we keep the lock to prevent retries
+                    if (isPermanentError(err)) {
+                        processingLocks.delete(orderId);
+                        console.log(
+                            `🔓 Removed lock for order ${orderId} due to permanent error`
+                        );
+                    }
+                    throw err;
+                }
+                // No finally block - we leave the lock in place until it expires
             }
 
             res.status(200).send("OK");
@@ -97,6 +140,16 @@ module.exports = (meliService) => {
             res.status(200).send("OK");
         }
     });
+
+    // Helper function to determine permanent errors
+    function isPermanentError(err) {
+        // Define errors that should immediately release the lock
+        return (
+            err.response?.status === 404 || // Not found
+            err.response?.status === 403 || // Unauthorized
+            err.response?.status === 410
+        ); // Gone
+    }
 
     router.get("/test", (req, res) => {
         res.send("Hello this works");
