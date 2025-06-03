@@ -116,55 +116,84 @@ class MercadoLibreService {
                     ...order.buyer,
                     ...fullBuyerInfo,
                 },
+                // Ensure shipping_info.tags exists even if empty
+                shipping_info: {
+                    ...order.shipping_info,
+                    tags: order.shipping_info?.tags || [], // This is the key change
+                },
             };
-
-            // Ensure no placeholder values are used
-            completeOrder.buyer.phone = completeOrder.buyer.phone || null;
-            completeOrder.buyer.address = completeOrder.buyer.address || null;
-            completeOrder.buyer.city = completeOrder.buyer.city || null;
-            completeOrder.buyer.state = completeOrder.buyer.state || null;
-            completeOrder.buyer.zip_code = completeOrder.buyer.zip_code || null;
 
             // 4. Check if order exists in database
             const existing = await MeliOrder.findOne({
                 orderId: completeOrder.id,
             });
 
-            // 5. Update or create order in database
             if (existing) {
+                console.log(
+                    `🔄 Order ${completeOrder.id} already exists in database`
+                );
+                return completeOrder;
+            }
+
+            // 5. Create new order in database
+            const newOrder = await MeliOrder.create({
+                orderId: completeOrder.id,
+                status: completeOrder.status,
+                date_created: completeOrder.date_created,
+                total_amount: completeOrder.total_amount,
+                currency: completeOrder.currency,
+                buyer: {
+                    id: completeOrder.buyer.id,
+                    nickname: completeOrder.buyer.nickname,
+                    first_name: completeOrder.buyer.first_name,
+                    last_name: completeOrder.buyer.last_name,
+                    email: completeOrder.buyer.email,
+                    phone: completeOrder.buyer.phone,
+                    identification_type:
+                        completeOrder.buyer.identification?.type,
+                    identification_number:
+                        completeOrder.buyer.identification?.number,
+                },
+                shipping: {
+                    receiver_name: completeOrder.shipping_info.receiver_name,
+                    receiver_phone: completeOrder.shipping_info.receiver_phone,
+                    address: completeOrder.shipping_info.address,
+                    status: completeOrder.shipping_info.shipping_status,
+                    tags: completeOrder.shipping_info.tags, // Now properly included
+                },
+                order_items: completeOrder.order_items,
+                payments: completeOrder.payments.map((payment) => ({
+                    id: payment.id,
+                    status: payment.status,
+                    total_paid: payment.total_paid,
+                    date_approved: payment.date_approved,
+                })),
+            });
+
+            console.log(
+                `📝 Created new order in database: ${newOrder.orderId}`
+            );
+
+            // Check if order should be marked as completed based on tags
+            await this.checkAndUpdateOrderStatus(newOrder);
+
+            // 6. Send to Odoo with complete information
+            const odooResult = await this.odooService.pushOrdersToOdoo([
+                completeOrder,
+            ]);
+
+            // 7. Update with Odoo reference
+            if (odooResult.length > 0 && odooResult[0].odooReference) {
                 await MeliOrder.findOneAndUpdate(
                     { orderId: completeOrder.id },
                     {
-                        status: completeOrder.status,
-                        date_created: completeOrder.date_created,
-                        total_amount: completeOrder.total_amount,
-                        buyer: completeOrder.buyer, // Now includes full buyer info
-                        currency: completeOrder.currency,
-                        order_items: completeOrder.order_items,
-                        payments: completeOrder.payments,
-                        shipping_type: completeOrder.shipping_type,
-                        shipping_cost: completeOrder.shipping_cost,
-                    },
-                    { new: true }
+                        odoo_reference: odooResult[0].odooReference,
+                        odoo_id: odooResult[0].saleOrderId,
+                    }
                 );
-            } else {
-                await MeliOrder.create({
-                    orderId: completeOrder.id,
-                    status: completeOrder.status,
-                    date_created: completeOrder.date_created,
-                    total_amount: completeOrder.total_amount,
-                    buyer_nickname: completeOrder.buyer.nickname,
-                    buyer_full: completeOrder.buyer, // Store complete buyer info
-                    currency: completeOrder.currency,
-                    order_items: completeOrder.order_items,
-                    payments: completeOrder.payments,
-                    shipping_type: completeOrder.shipping_type,
-                    shipping_cost: completeOrder.shipping_cost,
-                });
             }
 
-            // 6. Send to Odoo with complete information
-            await this.odooService.pushOrdersToOdoo([completeOrder]);
+            return completeOrder;
 
             return completeOrder;
         } catch (err) {
@@ -211,6 +240,86 @@ class MercadoLibreService {
         } catch (error) {
             console.error("❌ Error in createTestUser:", error.message);
             throw error;
+        }
+    }
+
+    async getOrderDetails(orderId, fields) {
+        try {
+            const details = await this.meliAPI.getOrderDetails(orderId, fields);
+            return details;
+        } catch (err) {
+            console.error("Error getting order details:", err);
+            throw err;
+        }
+    }
+
+    async getAllShipments(params = {}) {
+        try {
+            const shipments = await this.meliAPI.getAllShipments(params);
+
+            // Optionally process or transform the data here
+            return shipments;
+        } catch (err) {
+            console.error("Error getting shipments:", err);
+            throw err;
+        }
+    }
+
+    async checkAndUpdateOrderStatus(order) {
+        try {
+            // 1. Get the latest order data from MercadoLibre
+            const freshOrder = await this.meliAPI.getSingleOrder(order.orderId);
+
+            // 2. Check specifically for delivered status
+            const isDelivered =
+                freshOrder.shipping_info?.shipping_status === "delivered" ||
+                freshOrder.shipping_info?.tags?.includes("delivered");
+
+            if (isDelivered) {
+                console.log(
+                    `🔄 Order ${order.orderId} is marked as delivered, updating status...`
+                );
+
+                // 3. Update order in MongoDB
+                await MeliOrder.findOneAndUpdate(
+                    { orderId: order.orderId },
+                    {
+                        status: "completed",
+                        "shipping.status": "delivered",
+                        "shipping.tags": freshOrder.shipping_info?.tags || [],
+                    }
+                );
+
+                // 4. Get the stored Odoo reference
+                const dbOrder = await MeliOrder.findOne({
+                    orderId: order.orderId,
+                });
+
+                if (!dbOrder.odoo_id) {
+                    console.warn(
+                        `⚠️ No Odoo reference found for MercadoLibre order ${order.orderId}`
+                    );
+                    return;
+                }
+
+                // 5. Update status in Odoo using the stored ID
+                await this.odooService.updateOrderStatus(
+                    dbOrder.odoo_id,
+                    "delivered"
+                );
+                console.log(
+                    `✅ Updated Odoo order ${dbOrder.odoo_reference} (ID: ${dbOrder.odoo_id}) to delivered status`
+                );
+            } else {
+                console.log(
+                    `⏩ Order ${order.orderId} not delivered yet (status: ${freshOrder.shipping_info?.shipping_status})`
+                );
+            }
+        } catch (err) {
+            console.error(
+                `❌ Error updating order status for ${order.orderId}:`,
+                err
+            );
         }
     }
 }

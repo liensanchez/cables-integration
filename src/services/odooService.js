@@ -142,6 +142,7 @@ class OdooService {
                 results.push({
                     orderId: order.id,
                     status: "completed",
+                    odooReference,
                     saleOrderId,
                     partnerId,
                 });
@@ -342,10 +343,12 @@ class OdooService {
                 client_order_ref: `ML-${order.id}`,
                 warehouse_id: warehouseId,
                 //location_id: locationId,
-                invoice_status:
+                invoice_status: "to invoice", // Always start as "to invoice"
+                state: "draft", // Explicitly set as draft initially
+                /* invoice_status:
                     order.payments?.[0]?.status === "approved"
                         ? "invoiced"
-                        : "to invoice",
+                        : "to invoice", */
             },
         ]);
 
@@ -373,6 +376,56 @@ class OdooService {
                     },
                 ]);
             }
+        }
+    }
+
+    async updateOrderStatus(saleOrderId, meliStatus) {
+        const statusMapping = {
+            paid: "sale", // When payment is confirmed
+            shipped: "progress", // When order is shipped
+            delivered: "done", // When order is delivered
+            cancelled: "cancel", // When order is cancelled
+            completed: "done", // New status for completed orders
+        };
+
+        const odooStatus = statusMapping[meliStatus] || "draft";
+
+        if (odooStatus === "sale") {
+            await this.call("sale.order", "action_confirm", [[saleOrderId]]);
+        } else if (odooStatus === "done" || odooStatus === "completed") {
+            // For completed orders, ensure delivery is processed
+            try {
+                // First confirm the order if not already confirmed
+                await this.call("sale.order", "action_confirm", [
+                    [saleOrderId],
+                ]);
+
+                // Process delivery
+                const pickingIds = await this.call(
+                    "sale.order",
+                    "action_view_delivery",
+                    [[saleOrderId]]
+                );
+                if (pickingIds && pickingIds.length) {
+                    await this.call("stock.picking", "button_validate", [
+                        pickingIds,
+                    ]);
+                }
+
+                // Mark as done
+                await this.call("sale.order", "write", [
+                    [saleOrderId],
+                    { state: "done" },
+                ]);
+            } catch (err) {
+                console.error("Error completing order in Odoo:", err);
+                throw err;
+            }
+        } else {
+            await this.call("sale.order", "write", [
+                [saleOrderId],
+                { state: odooStatus },
+            ]);
         }
     }
 }

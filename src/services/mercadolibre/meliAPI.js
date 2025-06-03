@@ -1,7 +1,7 @@
 // src/services/mercadolibre/meliAPI.js
 const axios = require("axios");
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 const qs = require("qs");
 require("dotenv").config();
 
@@ -378,6 +378,7 @@ class MeliAPI {
     }
 
     // fetch single user's buyer info
+
     async getBuyerInfo(buyerId) {
         try {
             if (!this.token) {
@@ -474,6 +475,78 @@ class MeliAPI {
                 err.response?.data || err.message
             );
             throw err;
+        }
+    }
+
+    async getOrderDetails(orderId, fields) {
+        try {
+            if (!this.token) {
+                throw new Error("No access token available");
+            }
+
+            // Build query string if specific fields are requested
+            const query = fields ? `?attributes=${fields.join(",")}` : "";
+
+            const response = await axios.get(
+                `${this.baseUrl}/orders/${orderId}${query}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error(
+                "❌ Failed to get order details:",
+                error.response?.data || error.message
+            );
+            throw error;
+        }
+    }
+
+    async getAllShipments(params = {}) {
+        try {
+            if (!this.token) {
+                throw new Error("No access token available");
+            }
+
+            // Get user ID first
+            const userInfo = await axios.get(`${this.baseUrl}/users/me`, {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                },
+            });
+            const userId = userInfo.data.id;
+
+            // Default params
+            const defaultParams = {
+                seller: userId,
+                sort: "date_desc",
+                limit: 50,
+                offset: 0,
+            };
+
+            const finalParams = { ...defaultParams, ...params };
+            const queryString = qs.stringify(finalParams);
+
+            const response = await axios.get(
+                `${this.baseUrl}/shipments/search?${queryString}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error(
+                "❌ Failed to get shipments:",
+                error.response?.data || error.message
+            );
+            throw error;
         }
     }
 }

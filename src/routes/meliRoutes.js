@@ -1,20 +1,7 @@
 // src/routes/meliRoutes.js
 const express = require("express");
 const router = express.Router();
-
-const processingLocks = new Map();
-const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes lock duration
-
-// Cleanup function to remove expired locks
-setInterval(() => {
-    const now = Date.now();
-    for (const [orderId, timestamp] of processingLocks.entries()) {
-        if (now - timestamp > LOCK_TIMEOUT_MS) {
-            processingLocks.delete(orderId);
-            console.log(`♻️ Cleared expired lock for order ${orderId}`);
-        }
-    }
-}, 60 * 1000); // Run cleanup every minute
+const MeliOrder = require("../models/MeliOrder"); // Assuming Mongoose model for orders
 
 module.exports = (meliService) => {
     // route to get the auth
@@ -94,27 +81,19 @@ module.exports = (meliService) => {
                 body.resource.includes("/orders/")
             ) {
                 const orderId = body.resource.split("/orders/")[1];
-                const now = Date.now();
 
-                // Check for existing lock (regardless of age)
-                if (processingLocks.has(orderId)) {
-                    const lockTime = processingLocks.get(orderId);
+                // Check if order exists in MongoDB
+                const existingOrder = await MeliOrder.findOne({ orderId });
+                if (existingOrder) {
                     console.log(
-                        `⏳ Order ${orderId} is locked (since ${new Date(lockTime).toISOString()}), skipping. ` +
-                            `Will expire at ${new Date(lockTime + LOCK_TIMEOUT_MS).toISOString()}`
+                        `🔄 Repeated order ${orderId}, skipping processing`
                     );
-                    return res.status(200).send("OK - Already processing");
+                    return res.status(200).send("OK - Order already processed");
                 }
-
-                // Set new lock with current timestamp
-                processingLocks.set(orderId, now);
-                console.log(
-                    `🔒 Lock set for order ${orderId} at ${new Date(now).toISOString()}`
-                );
 
                 try {
                     console.log(
-                        `🔍 Processing order notification for ID: ${orderId}`
+                        `🔍 Processing new order notification for ID: ${orderId}`
                     );
                     const order = await meliService.getSingleOrder(orderId);
                     console.log(
@@ -122,16 +101,8 @@ module.exports = (meliService) => {
                     );
                 } catch (err) {
                     console.error(`❌ Error processing order ${orderId}:`, err);
-                    // For non-permanent errors, we keep the lock to prevent retries
-                    if (isPermanentError(err)) {
-                        processingLocks.delete(orderId);
-                        console.log(
-                            `🔓 Removed lock for order ${orderId} due to permanent error`
-                        );
-                    }
                     throw err;
                 }
-                // No finally block - we leave the lock in place until it expires
             }
 
             res.status(200).send("OK");
@@ -140,16 +111,6 @@ module.exports = (meliService) => {
             res.status(200).send("OK");
         }
     });
-
-    // Helper function to determine permanent errors
-    function isPermanentError(err) {
-        // Define errors that should immediately release the lock
-        return (
-            err.response?.status === 404 || // Not found
-            err.response?.status === 403 || // Unauthorized
-            err.response?.status === 410
-        ); // Gone
-    }
 
     router.get("/test", (req, res) => {
         res.send("Hello this works");
@@ -162,6 +123,72 @@ module.exports = (meliService) => {
         } catch (err) {
             console.error("Error creating test user:", err.message);
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Route to get specific order details
+    router.get("/user/orders/:orderId/details", async (req, res, next) => {
+        try {
+            const orderId = req.params.orderId;
+            const fields = req.query.fields
+                ? req.query.fields.split(",")
+                : null;
+
+            if (!orderId) {
+                return res.status(400).json({ message: "Missing order ID" });
+            }
+
+            const details = await meliService.getOrderDetails(orderId, fields);
+            res.json(details);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // Route to get all shipments with optional filters
+    router.get("/user/shipments", async (req, res, next) => {
+        try {
+            // Extract query params
+            const { status, date_from, date_to, limit, offset } = req.query;
+
+            const params = {
+                ...(status && { status }),
+                ...(date_from && { date_from }),
+                ...(date_to && { date_to }),
+                ...(limit && { limit: parseInt(limit) }),
+                ...(offset && { offset: parseInt(offset) }),
+            };
+
+            const shipments = await meliService.getAllShipments(params);
+            res.json(shipments);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.post("/orders/:orderId/check-status", async (req, res, next) => {
+        try {
+            const orderId = req.params.orderId;
+            if (!orderId) {
+                return res.status(400).json({ message: "Missing order ID" });
+            }
+
+            // Get the order from database
+            const order = await MeliOrder.findOne({ orderId });
+            if (!order) {
+                return res.status(404).json({ message: "Order not found" });
+            }
+
+            // Check and update status
+            await meliService.checkAndUpdateOrderStatus(order);
+
+            res.json({
+                message: "Order status checked",
+                orderId,
+                status: order.status,
+            });
+        } catch (err) {
+            next(err);
         }
     });
 

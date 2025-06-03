@@ -8,20 +8,24 @@ const MeliOrderSchema = new mongoose.Schema(
         date_created: Date,
         total_amount: Number,
         currency: String,
+        odoo_reference: String, // Add this field to store Odoo order reference
+        odoo_id: Number, // Add this to store Odoo's internal ID
         buyer: {
             id: Number,
             nickname: String,
             first_name: String,
             last_name: String,
             email: String,
-            phone: String, // Simplified phone storage
-            identification_type: String, // Store type separately
-            identification_number: String // Store number separately
+            phone: String,
+            identification_type: String,
+            identification_number: String,
         },
         shipping: {
             receiver_name: String,
             receiver_phone: String,
-            address: String
+            address: String,
+            status: String,
+            tags: [String], // Add this field for shipment tags
         },
         order_items: [
             {
@@ -30,16 +34,16 @@ const MeliOrderSchema = new mongoose.Schema(
                 quantity: Number,
                 unit_price: Number,
                 currency: String,
-            }
+            },
         ],
         payments: [
             {
                 id: Number,
                 status: String,
                 total_paid: Number,
-                date_approved: Date
-            }
-        ]
+                date_approved: Date,
+            },
+        ],
     },
     { timestamps: true }
 );
