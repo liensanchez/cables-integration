@@ -176,65 +176,65 @@ class OdooService {
         }
         return results;
     }
-
+    
     async createOrUpdatePartner(order) {
         const partnerName =
             order.buyer?.first_name && order.buyer?.last_name
                 ? `${order.buyer.first_name} ${order.buyer.last_name}`
-                : order.buyer?.nickname || "MercadoLibre Buyer";
+                : order.buyer?.nickname || "Comprador MercadoLibre";
 
-        // Normalize and prepare buyer information
         const email = (order.buyer?.email || "").trim().toLowerCase();
         const phone = (order.buyer?.phone || "").trim();
-        const vat = (order.buyer?.identification?.number || "")
+        const rfcRaw = (order.buyer?.identification?.number || "")
             .trim()
             .toUpperCase();
         const fallbackEmail = `${order.id}@meli.local`;
 
-        // Validate VAT format
-        let vatFormatted = vat;
-        if (vatFormatted && vatFormatted !== "NOAVAILABLE") {
-            if (!vatFormatted.match(/^[A-Z]{2}\d+$/)) {
+        // Validación básica de RFC (puedes ajustarla según tus reglas)
+        let rfcFormatted = rfcRaw;
+        const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/; // formato RFC mexicano común
+
+        if (rfcFormatted && rfcFormatted !== "NOAVAILABLE") {
+            if (!rfcRegex.test(rfcFormatted)) {
                 console.warn(
-                    `VAT number ${vatFormatted} is not in the correct format. Expected format: CC##. Clearing VAT number.`
+                    `RFC "${rfcFormatted}" no tiene formato válido. Se limpiará.`
                 );
-                vatFormatted = false;
+                rfcFormatted = false;
             }
         } else {
-            vatFormatted = false;
+            rfcFormatted = false;
         }
 
-        // FIRST search by name (most important check to prevent duplicates)
+        // Buscar partner primero por nombre
         let partnerIds = await this.call("res.partner", "search", [
             [["name", "=ilike", partnerName]],
         ]);
 
-        // If no match by name, try other identifiers
-        if (!partnerIds.length) {
-            if (vatFormatted) {
-                partnerIds = await this.call("res.partner", "search", [
-                    [["vat", "=", vatFormatted]],
-                ]);
-            }
-
-            if (!partnerIds.length && email) {
-                partnerIds = await this.call("res.partner", "search", [
-                    [["email", "=ilike", email]],
-                ]);
-            }
-
-            if (!partnerIds.length && phone) {
-                partnerIds = await this.call("res.partner", "search", [
-                    [["phone", "=", phone]],
-                ]);
-            }
+        // Si no existe, buscar por RFC
+        if (!partnerIds.length && rfcFormatted) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["vat", "=", rfcFormatted]],
+            ]);
         }
 
-        // Ensure the "MercadoLibre" category exists
+        // Luego por email
+        if (!partnerIds.length && email) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["email", "=ilike", email]],
+            ]);
+        }
+
+        // Luego por teléfono
+        if (!partnerIds.length && phone) {
+            partnerIds = await this.call("res.partner", "search", [
+                [["phone", "=", phone]],
+            ]);
+        }
+
+        // Categoría MercadoLibre
         let categoryIds = await this.call("res.partner.category", "search", [
             [["name", "=", "MercadoLibre"]],
         ]);
-
         if (!categoryIds.length) {
             const categoryId = await this.call(
                 "res.partner.category",
@@ -244,7 +244,17 @@ class OdooService {
             categoryIds = [categoryId];
         }
 
-        // Prepare address information
+        // BUSCAMOS EL PAÍS MÉXICO DINÁMICAMENTE
+        const mexico = await this.call("res.country", "search_read", [
+            [["name", "ilike", "Mexico"]],
+            ["id", "name"],
+        ]);
+        if (!mexico.length) {
+            throw new Error("No se encontró el país México en res.country");
+        }
+        const mexicoCountryId = mexico[0].id;
+
+        // Extraer dirección para buscar estado
         const rawAddress =
             order.billing_info?.address || order.shipping_info?.address || "";
         let street = "",
@@ -259,12 +269,16 @@ class OdooService {
             zip = parts[2]?.trim() || "";
             city = parts[3]?.trim() || "";
             const lastPart = parts[4] || "";
+            // El estado suele estar separado por coma
             stateName = lastPart.split(",")[1]?.trim() || lastPart.trim();
         }
 
         if (stateName) {
             const states = await this.call("res.country.state", "search_read", [
-                [["name", "ilike", stateName]],
+                [
+                    ["name", "ilike", stateName],
+                    ["country_id", "=", mexicoCountryId],
+                ],
                 ["id"],
             ]);
             if (states.length) {
@@ -272,28 +286,26 @@ class OdooService {
             }
         }
 
-        // Prepare partner data
         const partnerData = {
             name: partnerName,
             email: email || fallbackEmail,
             phone: phone || order.shipping_info?.receiver_phone || "",
-            vat: vatFormatted || "",
+            vat: rfcFormatted || "",
             street,
             zip,
             city,
             state_id: stateId || undefined,
+            country_id: mexicoCountryId,
+            lang: "es_MX", // Idioma español por defecto
             category_id: [[6, false, categoryIds]],
-            comment: `MercadoLibre Buyer\nID: ${order.buyer?.id || ""}\nType: ${order.buyer?.identification?.type || ""}`,
+            comment: `Comprador MercadoLibre\nID: ${order.buyer?.id || ""}\nTipo ID: ${order.buyer?.identification?.type || ""}`,
         };
 
-        // Update or create partner
         if (partnerIds.length) {
-            // Check if we need to update any missing information
             const existingPartner = await this.call("res.partner", "read", [
                 partnerIds[0],
                 Object.keys(partnerData),
             ]);
-
             let needsUpdate = false;
             for (const key in partnerData) {
                 if (
@@ -308,7 +320,7 @@ class OdooService {
 
             if (needsUpdate) {
                 console.log(
-                    `🔄 Updating partner ID ${partnerIds[0]} for order ${order.id}`
+                    `🔄 Actualizando partner ID ${partnerIds[0]} para orden ${order.id}`
                 );
                 await this.call("res.partner", "write", [
                     [partnerIds[0]],
@@ -321,7 +333,7 @@ class OdooService {
                 partnerData,
             ]);
             console.log(
-                `✅ Created new partner ID ${newPartnerId} for order ${order.id}`
+                `✅ Creado nuevo partner ID ${newPartnerId} para orden ${order.id}`
             );
             return newPartnerId;
         }
