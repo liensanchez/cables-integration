@@ -46,5 +46,29 @@
                 "country": "México"
             }
         }
-    }
+    },
+    {
+	"id": 2481996796,
+	"email": "test_user_446185308@testuser.com",
+	"nickname": "TESTUSER446185308",
+	"site_status": "active",
+	"password": "kXm6wPKo5S",
+	"simulated": {
+		"email": "test_user_446185308@testuser.com",
+		"phone": {
+			"number": "5555555555",
+			"area_code": "55",
+			"extension": null,
+			"verified": true
+		},
+		"address": {
+			"street_name": "Avenida Reforma",
+			"street_number": "123",
+			"city": "Ciudad de México",
+			"zip_code": "11100",
+			"state": "Ciudad de México",
+			"country": "México"
+		}
+	}
+}
 ]

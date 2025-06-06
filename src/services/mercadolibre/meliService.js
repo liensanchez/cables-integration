@@ -46,20 +46,65 @@ class MercadoLibreService {
                 }
             }
 
-            // 3. Prepare complete order object with merged buyer info
+            // 3. Fetch billing info if available
+            let billingInfo = {};
+            try {
+                billingInfo = await this.meliAPI.getBillingInfo(orderId);
+                console.log(
+                    "Raw billing info:",
+                    JSON.stringify(billingInfo, null, 2)
+                );
+
+                // Extract fields from additional_info array
+                const additionalInfo = {};
+                if (billingInfo?.billing_info?.additional_info) {
+                    billingInfo.billing_info.additional_info.forEach((item) => {
+                        additionalInfo[item.type] = item.value;
+                    });
+                }
+
+                // Add identification info to buyer object
+                fullBuyerInfo = {
+                    ...fullBuyerInfo,
+                    first_name:
+                        additionalInfo.FIRST_NAME || fullBuyerInfo.first_name,
+                    last_name:
+                        additionalInfo.LAST_NAME || fullBuyerInfo.last_name,
+                    identification: {
+                        type:
+                            billingInfo.billing_info?.doc_type ||
+                            additionalInfo.DOC_TYPE ||
+                            "RFC",
+                        number:
+                            billingInfo.billing_info?.doc_number ||
+                            additionalInfo.DOC_NUMBER ||
+                            "",
+                    },
+                    address: {
+                        street: `${additionalInfo.STREET_NAME || ""} ${additionalInfo.STREET_NUMBER || ""}`.trim(),
+                        city: additionalInfo.CITY_NAME,
+                        state: additionalInfo.STATE_NAME,
+                        zip_code: additionalInfo.ZIP_CODE,
+                        country: additionalInfo.COUNTRY_ID,
+                    },
+                };
+            } catch (billingError) {
+                console.error(
+                    `Could not fetch billing info for order ${orderId}:`,
+                    billingError.message
+                );
+            }
+
+            // 4. Prepare complete order object with merged buyer info
             const completeOrder = {
                 ...order,
                 buyer: {
                     ...order.buyer,
                     ...fullBuyerInfo,
                 },
-                // Ensure shipping_info.tags exists even if empty
-                shipping_info: {
-                    ...order.shipping_info,
-                    tags: order.shipping_info?.tags || [], // This is the key change
-                },
+                // Include the full billing info at the root level
+                billing_info: billingInfo.billing_info || null,
             };
-
             // 4. Check if order exists in database
             const existing = await MeliOrder.findOne({
                 orderId: completeOrder.id,

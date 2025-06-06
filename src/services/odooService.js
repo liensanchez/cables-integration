@@ -179,21 +179,44 @@ class OdooService {
     }
 
     async createOrUpdatePartner(order) {
+        // Use billing info if available, fall back to shipping info or buyer info
+
+        // Use billing info if available, fall back to shipping info or buyer info
+        const billingAddress = order.buyer?.address || {};
+        const shippingAddress = order.shipping_info?.address || {};
+
+        // Use identification from either:
+        // 1. Billing info (new structure)
+        // 2. Buyer's identification (old structure)
+        const identification = order.billing_info?.doc_number
+            ? {
+                  type: order.billing_info.doc_type || "RFC",
+                  number: order.billing_info.doc_number,
+              }
+            : order.buyer?.identification;
+
         const partnerName =
-            order.buyer?.first_name && order.buyer?.last_name
-                ? `${order.buyer.first_name} ${order.buyer.last_name}`
-                : order.buyer?.nickname || "Comprador MercadoLibre";
+            [order.buyer?.first_name, order.buyer?.last_name]
+                .filter(Boolean)
+                .join(" ") ||
+            order.buyer?.nickname ||
+            "Comprador MercadoLibre";
 
         const email = (order.buyer?.email || "").trim().toLowerCase();
         const phone = (order.buyer?.phone || "").trim();
-        const rfcRaw = (order.buyer?.identification?.number || "")
-            .trim()
-            .toUpperCase();
+        const rfcRaw = (identification?.number || "").trim().toUpperCase();
         const fallbackEmail = `${order.id}@meli.local`;
 
-        // Validación básica de RFC (puedes ajustarla según tus reglas)
+        // Address components - use let instead of const since they might be modified
+        let street = billingAddress.street || shippingAddress.street || "";
+        let zip = billingAddress.zip_code || shippingAddress.zip_code || "";
+        let city = billingAddress.city || shippingAddress.city || "";
+        let stateName = billingAddress.state || shippingAddress.state || "";
+        let stateId = null; // Initialize stateId
+
+        // Validación básica de RFC
+        const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/;
         let rfcFormatted = rfcRaw;
-        const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/; // formato RFC mexicano común
 
         if (rfcFormatted && rfcFormatted !== "NOAVAILABLE") {
             if (!rfcRegex.test(rfcFormatted)) {
@@ -258,11 +281,6 @@ class OdooService {
         // Extraer dirección para buscar estado
         const rawAddress =
             order.billing_info?.address || order.shipping_info?.address || "";
-        let street = "",
-            zip = "",
-            city = "",
-            stateName = "",
-            stateId = null;
 
         if (rawAddress) {
             const parts = rawAddress.split("-");
@@ -512,16 +530,16 @@ class OdooService {
                 );
             }
 
-                  // Format date in Odoo's expected format
-        const now = new Date();
-        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            // Format date in Odoo's expected format
+            const now = new Date();
+            const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 
             // 3. Update all relevant pickings
             const updateResults = await Promise.all(
                 pickings.map(async (picking) => {
                     return await odooRpc.update("stock.picking", picking.id, {
                         state: "done",
-                        /* ml_shipping_id: mlShippingId,  */// Store ML shipping ID for reference
+                        /* ml_shipping_id: mlShippingId,  */ // Store ML shipping ID for reference
                         date_done: formattedDate,
                     });
                 })

@@ -437,12 +437,39 @@ class MeliAPI {
 
     async getBuyerInfo(buyerId) {
         try {
-            if (!this.token) {
-                throw new Error("No access token available");
-            }
+            // Fetch buyer info from API
+            const buyer = await this.meliAPI.getBuyerInfo(buyerId);
 
+            // Transform data if needed
+            return {
+                id: buyer.id,
+                nickname: buyer.nickname,
+                email: buyer.email || null,
+                first_name: buyer.first_name || null,
+                last_name: buyer.last_name || null,
+                phone: buyer.phone?.number || null,
+                address: buyer.address?.address || null,
+                city: buyer.address?.city || null,
+                state: buyer.address?.state || null,
+                zip_code: buyer.address?.zip_code || null,
+                registration_date: buyer.registration_date || null,
+                user_type: buyer.user_type || null,
+                points: buyer.points || null,
+                site_id: buyer.site_id || null,
+                permalink: buyer.permalink || null,
+                status: buyer.status || null,
+                identification: buyer.identification || null, // Add identification info
+            };
+        } catch (err) {
+            console.error("Error fetching buyer info:", err);
+            throw err;
+        }
+    }
+
+    async getBillingInfo(orderId) {
+        try {
             const response = await axios.get(
-                `${this.baseUrl}/users/${buyerId}`,
+                `${this.baseUrl}/orders/${orderId}/billing_info`,
                 {
                     headers: {
                         Authorization: `Bearer ${this.token}`,
@@ -451,12 +478,10 @@ class MeliAPI {
             );
 
             return response.data;
-        } catch (error) {
-            console.error(
-                "❌ Failed to get buyer info:",
-                error.response?.data || error.message
-            );
-            throw error;
+        } catch (err) {
+            console.error("Error fetching billing info:", err);
+            // Return empty object instead of throwing error to continue processing
+            return {};
         }
     }
 
