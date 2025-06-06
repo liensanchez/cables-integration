@@ -32,7 +32,7 @@ services:
     command: mongod --quiet
 
   odoo:
-    image: odoo:16
+    image: odoo:18
     container_name: odoo
     logging:
       driver: "none"  # Completely disable all logging

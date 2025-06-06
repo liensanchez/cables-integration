@@ -37,6 +37,37 @@ async function call(model, method, args, kwargs = {}) {
   });
 }
 
+// Helper methods
+async function search(model, domain, options = {}) {
+  return call(model, 'search', [domain], options);
+}
+
+async function searchRead(model, domain, fields, options = {}) {
+  return call(model, 'search_read', [domain], { fields, ...options });
+}
+
+async function read(model, ids, fields, options = {}) {
+  return call(model, 'read', [ids], { fields, ...options });
+}
+
+async function create(model, data) {
+  return call(model, 'create', [data]);
+}
+
+async function update(model, ids, data) {
+  return call(model, 'write', [ids, data]);
+}
+
+async function remove(model, ids) {
+  return call(model, 'unlink', [ids]);
+}
+
 module.exports = {
   call,
+  search,
+  searchRead,
+  read,
+  create,
+  update,
+  remove,
 };

@@ -103,12 +103,124 @@ module.exports = (meliService) => {
                     console.error(`❌ Error processing order ${orderId}:`, err);
                     throw err;
                 }
+
+                return res.status(200).send("OK - Order processed");
             }
 
-            res.status(200).send("OK");
+            // 🟦 SHIPMENTS (NEW CONDITION)
+            if (
+                body.topic === "shipments" &&
+                body.resource.includes("/shipments/")
+            ) {
+                const orderId = body.resource.split("/shipments/")[1];
+
+                console.log(
+                    `🚚 Processing shipment notification for order ID: ${orderId}`
+                );
+
+                try {
+                    // 1. Get order details
+                    const order =
+                        await meliService.meliAPI.getSingleOrder(orderId);
+                    console.log(
+                        `🔍 Retrieved order ${orderId} with shipping ID: ${order.shipping_id}`
+                    );
+
+                    if (!order.shipping_id) {
+                        console.warn(
+                            `⚠️ No shipping ID found in order ${orderId}`
+                        );
+                        return res
+                            .status(200)
+                            .send("OK - No shipping ID found");
+                    }
+
+                    // 2. Get shipment details
+                    const shipment = await meliService.meliAPI.getShipment(
+                        order.shipping_id
+                    );
+                    console.log(
+                        `📦 Shipment status: ${shipment.status} (substatus: ${shipment.substatus})`
+                    );
+
+                    // 3. Find the associated order in our database
+                    const dbOrder = await MeliOrder.findOne({
+                        orderId: orderId,
+                    });
+                    if (!dbOrder) {
+                        console.warn(
+                            `⚠️ No order found in database for ${orderId}`
+                        );
+                        return res
+                            .status(200)
+                            .send("OK - No associated order found");
+                    }
+
+                    if (!dbOrder.odoo_id) {
+                        console.warn(
+                            `⚠️ No Odoo reference found for order ${orderId}`
+                        );
+                        return res
+                            .status(200)
+                            .send("OK - No Odoo reference found");
+                    }
+
+                    // 4. Check delivery status (more robust check)
+                    const isDelivered =
+                        shipment.status === "delivered" ||
+                        (shipment.substatus &&
+                            shipment.substatus.includes("delivered"));
+
+                    if (isDelivered) {
+                        console.log(
+                            `📦 Shipment ${order.shipping_id} marked as delivered`
+                        );
+
+                        // 5. Update Odoo
+                        await meliService.odooService.updateShipmentStatus(
+                            dbOrder.odoo_id,
+                            "done",
+                            order.shipping_id // Use shipping_id here too
+                        );
+
+                        // 6. Update our database
+                        await MeliOrder.findOneAndUpdate(
+                            { orderId: orderId },
+                            {
+                                "shipping.status": "delivered",
+                                "shipping.tags": ["delivered"],
+                                status: "completed",
+                                updatedAt: new Date(),
+                            }
+                        );
+
+                        console.log(
+                            `✅ Updated Odoo shipment for order ${orderId}`
+                        );
+                    } else {
+                        console.log(
+                            `⏩ Shipment ${order.shipping_id} status: ${shipment.status}, not updating yet`
+                        );
+                    }
+
+                    return res.status(200).send("OK - Shipment processed");
+                } catch (err) {
+                    console.error(
+                        `❌ Error processing shipment for order ${orderId}:`,
+                        err
+                    );
+                    throw err;
+                }
+            }
+
+            // For other webhook types we don't handle
+            console.log(`ℹ️ Unhandled webhook type: ${body.topic}`);
+            return res
+                .status(200)
+                .send("OK - Webhook received but not processed");
         } catch (err) {
             console.error("Webhook processing error:", err);
-            res.status(200).send("OK");
+            res.status(500).send("Internal Server Error");
         }
     });
 

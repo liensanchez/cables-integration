@@ -1,5 +1,6 @@
 // src/services/odooService.js
 const { call } = require("../utils/odooRpc");
+const odooRpc = require("../utils/odooRpc");
 require("dotenv").config();
 const xmlrpc = require("xmlrpc");
 
@@ -157,7 +158,7 @@ class OdooService {
         }
         return results;
     }
-    
+
     async createOrUpdatePartner(order) {
         const partnerName =
             order.buyer?.first_name && order.buyer?.last_name
@@ -438,6 +439,57 @@ class OdooService {
                 [saleOrderId],
                 { state: odooStatus },
             ]);
+        }
+    }
+
+    async updateShipmentStatus(odooId, status, mlShippingId) {
+        try {
+            // 1. First get the sale order to find related pickings
+            const saleOrder = await odooRpc.searchRead(
+                "sale.order",
+                [["id", "=", odooId]],
+                ["name", "picking_ids"]
+            );
+
+            if (!saleOrder || saleOrder.length === 0) {
+                throw new Error(`No sale order found with ID ${odooId}`);
+            }
+
+            // 2. Get all pickings for this order
+            const pickings = await odooRpc.searchRead(
+                "stock.picking",
+                [
+                    ["id", "in", saleOrder[0].picking_ids],
+                    ["state", "!=", "done"], // Only consider not-done pickings
+                ],
+                ["name", "state", "origin"]
+            );
+
+            if (!pickings || pickings.length === 0) {
+                throw new Error(
+                    `No picking found for MercadoLibre shipment ${mlShippingId}`
+                );
+            }
+
+                  // Format date in Odoo's expected format
+        const now = new Date();
+        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+            // 3. Update all relevant pickings
+            const updateResults = await Promise.all(
+                pickings.map(async (picking) => {
+                    return await odooRpc.update("stock.picking", picking.id, {
+                        state: "done",
+                        /* ml_shipping_id: mlShippingId,  */// Store ML shipping ID for reference
+                        date_done: formattedDate,
+                    });
+                })
+            );
+
+            return updateResults;
+        } catch (error) {
+            console.error("Error updating shipment status:", error);
+            throw error;
         }
     }
 }
