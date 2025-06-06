@@ -58,25 +58,5 @@ module.exports = (odooSer, meliService) => {
         }
     });
 
-    router.get("/inventory/:odoo_id", async (req, res) => {
-        try {
-            const inventoryInfo =
-                await odooSer.getInventoryInfoForSaleOrder(
-                    parseInt(req.params.odoo_id)
-                );
-
-            res.json({
-                success: true,
-                data: inventoryInfo,
-            });
-        } catch (error) {
-            console.error("Test route error:", error);
-            res.status(500).json({
-                success: false,
-                error: error.message,
-            });
-        }
-    });
-
     return router;
 };

@@ -8,16 +8,8 @@ const MeliOrderSchema = new mongoose.Schema(
         date_created: Date,
         total_amount: Number,
         currency: String,
-        odoo_id: Number,
-        odoo_reference: String,
-        odoo_client_ref: String,
-        odoo_picking_ids: [
-            {
-                id: Number, // Odoo's internal picking ID
-                name: String, // Picking reference (e.g., WH/OUT/00015)
-                status: String, // Picking status
-            },
-        ],
+        odoo_reference: String, // Add this field to store Odoo order reference
+        odoo_id: Number, // Add this to store Odoo's internal ID
         buyer: {
             id: Number,
             nickname: String,

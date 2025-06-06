@@ -22,6 +22,69 @@ class MercadoLibreService {
         }
     }
 
+    // Method to get products for the user
+    async getUserProducts() {
+        try {
+            const products = await this.meliAPI.getUserProducts(); // fetch products using the access token
+            return products;
+        } catch (err) {
+            console.error("Error fetching products:", err);
+            throw err;
+        }
+    }
+
+    // Method to get orders for the user
+    async getUserOrders() {
+        try {
+            const orders = await this.meliAPI.getUserOrders();
+
+            const processedOrders = await Promise.all(
+                orders.map(async (order) => {
+                    const existing = await MeliOrder.findOne({
+                        orderId: order.id,
+                    });
+
+                    if (existing) {
+                        await MeliOrder.findOneAndUpdate(
+                            { orderId: order.id },
+                            {
+                                status: order.status,
+                                date_created: order.date_created,
+                                total_amount: order.total_amount,
+                                buyer: order.buyer,
+                                currency: order.currency,
+                                order_items: order.order_items,
+                                payments: order.payments,
+                            },
+                            { new: true }
+                        );
+                    } else {
+                        await MeliOrder.create({
+                            orderId: order.id,
+                            status: order.status,
+                            date_created: order.date_created,
+                            total_amount: order.total_amount,
+                            buyer_nickname: order.buyer.nickname,
+                            currency: order.currency,
+                            order_items: order.order_items,
+                            payments: order.payments,
+                        });
+                    }
+
+                    // Enviar a Odoo
+                    await this.odooService.pushOrdersToOdoo([order]);
+
+                    return order;
+                })
+            );
+
+            return processedOrders;
+        } catch (err) {
+            console.error("Error fetching and saving orders:", err);
+            throw err;
+        }
+    }
+
     // Method to get one order for the user
     async getSingleOrder(orderId) {
         try {
@@ -115,99 +178,26 @@ class MercadoLibreService {
             await this.checkAndUpdateOrderStatus(newOrder);
 
             // 6. Send to Odoo with complete information
-            const odooResults = await this.odooService.pushOrdersToOdoo([
+            const odooResult = await this.odooService.pushOrdersToOdoo([
                 completeOrder,
             ]);
-            const odooResult = odooResults[0];
 
-            // 7. Update MongoDB with Odoo references
-            if (odooResult.odooId) {
+            // 7. Update with Odoo reference
+            if (odooResult.length > 0 && odooResult[0].odooReference) {
                 await MeliOrder.findOneAndUpdate(
                     { orderId: completeOrder.id },
                     {
-                        odoo_id: odooResult.odooId,
-                        odoo_reference: odooResult.odooReference,
-                        odoo_client_ref: odooResult.odooClientRef,
-                        odoo_picking_ids: odooResult.odooPickings.map((p) => ({
-                            id: p.id,
-                            name: p.name,
-                            status: p.state,
-                        })),
+                        odoo_reference: odooResult[0].odooReference,
+                        odoo_id: odooResult[0].saleOrderId,
                     }
                 );
             }
 
-            return {
-                ...completeOrder,
-                odooReference: odooResult.odooReference,
-                odooId: odooResult.odooId,
-                odooPickings: odooResult.odooPickings,
-            };
+            return completeOrder;
+
+            return completeOrder;
         } catch (err) {
             console.error("Error fetching single order:", err);
-            throw err;
-        }
-    }
-
-    // Method to get products for the user
-    async getUserProducts() {
-        try {
-            const products = await this.meliAPI.getUserProducts(); // fetch products using the access token
-            return products;
-        } catch (err) {
-            console.error("Error fetching products:", err);
-            throw err;
-        }
-    }
-
-    // Method to get orders for the user
-    async getUserOrders() {
-        try {
-            const orders = await this.meliAPI.getUserOrders();
-
-            const processedOrders = await Promise.all(
-                orders.map(async (order) => {
-                    const existing = await MeliOrder.findOne({
-                        orderId: order.id,
-                    });
-
-                    if (existing) {
-                        await MeliOrder.findOneAndUpdate(
-                            { orderId: order.id },
-                            {
-                                status: order.status,
-                                date_created: order.date_created,
-                                total_amount: order.total_amount,
-                                buyer: order.buyer,
-                                currency: order.currency,
-                                order_items: order.order_items,
-                                payments: order.payments,
-                            },
-                            { new: true }
-                        );
-                    } else {
-                        await MeliOrder.create({
-                            orderId: order.id,
-                            status: order.status,
-                            date_created: order.date_created,
-                            total_amount: order.total_amount,
-                            buyer_nickname: order.buyer.nickname,
-                            currency: order.currency,
-                            order_items: order.order_items,
-                            payments: order.payments,
-                        });
-                    }
-
-                    // Enviar a Odoo
-                    await this.odooService.pushOrdersToOdoo([order]);
-
-                    return order;
-                })
-            );
-
-            return processedOrders;
-        } catch (err) {
-            console.error("Error fetching and saving orders:", err);
             throw err;
         }
     }
@@ -318,7 +308,7 @@ class MercadoLibreService {
                     "delivered"
                 );
                 console.log(
-                    `✅ Updated Odoo order ${dbOrder.odoo_reference} (ID: ${dbOrder.odoo_id}) to delivered`
+                    `✅ Updated Odoo order ${dbOrder.odoo_reference} (ID: ${dbOrder.odoo_id}) to delivered status`
                 );
             } else {
                 console.log(
