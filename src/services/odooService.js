@@ -1,5 +1,6 @@
 // src/services/odooService.js
 const { call } = require("../utils/odooRpc");
+const odooRpc = require("../utils/odooRpc");
 require("dotenv").config();
 const xmlrpc = require("xmlrpc");
 
@@ -176,7 +177,7 @@ class OdooService {
         }
         return results;
     }
-    
+
     async createOrUpdatePartner(order) {
         const partnerName =
             order.buyer?.first_name && order.buyer?.last_name
@@ -482,223 +483,54 @@ class OdooService {
         }
     }
 
-    async getInventoryInfoForSaleOrder(saleOrderId) {
+    async updateShipmentStatus(odooId, status, mlShippingId) {
         try {
-            console.log(`🔍 Fetching inventory info for order ${saleOrderId}`);
+            // 1. First get the sale order to find related pickings
+            const saleOrder = await odooRpc.searchRead(
+                "sale.order",
+                [["id", "=", odooId]],
+                ["name", "picking_ids"]
+            );
 
-            // 1. Get extended sale order info including state and picking_ids
-            const saleOrders = await this.call("sale.order", "read", [
-                [saleOrderId],
+            if (!saleOrder || saleOrder.length === 0) {
+                throw new Error(`No sale order found with ID ${odooId}`);
+            }
+
+            // 2. Get all pickings for this order
+            const pickings = await odooRpc.searchRead(
+                "stock.picking",
                 [
-                    "name",
-                    "client_order_ref",
-                    "origin",
-                    "state",
-                    "picking_ids",
-                    "warehouse_id",
+                    ["id", "in", saleOrder[0].picking_ids],
+                    ["state", "!=", "done"], // Only consider not-done pickings
                 ],
-            ]);
+                ["name", "state", "origin"]
+            );
 
-            const saleOrder = saleOrders?.[0];
-
-            if (!saleOrder) {
-                throw new Error(`Sale order ${saleOrderId} not found`);
-            }
-
-            console.log("📦 Order state:", saleOrder.state);
-            console.log("📦 Order origin:", saleOrder.origin);
-            console.log("📦 Direct picking IDs:", saleOrder.picking_ids);
-
-            // 2. Try multiple ways to find related pickings
-            let pickingIds = saleOrder.picking_ids || [];
-
-            // If no direct pickings, try searching by origin
-            if (pickingIds.length === 0) {
-                const origin =
-                    saleOrder.origin ||
-                    `MELI-${saleOrder.client_order_ref?.replace("ML-", "")}`;
-                console.log("🔍 Searching pickings by origin:", origin);
-
-                pickingIds = await this.call("stock.picking", "search", [
-                    [
-                        "|",
-                        ["origin", "=", origin],
-                        ["origin", "=", `MELI-${saleOrder.client_order_ref}`],
-                    ],
-                ]);
-                console.log("🔍 Found picking IDs by origin:", pickingIds);
-            }
-
-            // 3. If still no pickings and order isn't confirmed, try confirming it
-            if (pickingIds.length === 0 && saleOrder.state !== "sale") {
-                console.log("⚠️ Order not confirmed, attempting to confirm...");
-                await this.call("sale.order", "action_confirm", [
-                    [saleOrderId],
-                ]);
-                await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for operations
-
-                // Try getting pickings again
-                pickingIds = (
-                    await this.call("sale.order", "read", [
-                        saleOrderId,
-                        ["picking_ids"],
-                    ])
-                ).picking_ids;
-                console.log("🔄 Pickings after confirmation:", pickingIds);
-            }
-
-            // 4. Get detailed picking info
-            const pickings = pickingIds.length
-                ? await this.call("stock.picking", "read", [
-                      pickingIds,
-                      [
-                          "id",
-                          "name",
-                          "state",
-                          "scheduled_date",
-                          "date_done",
-                          "move_ids",
-                      ],
-                  ])
-                : [];
-
-            // 5. Get moves information (alternative method if pickings are empty)
-            let moves = [];
-            if (pickingIds.length) {
-                moves = await this.call("stock.move", "search_read", [
-                    [["picking_id", "in", pickingIds]],
-                    [
-                        "id",
-                        "product_id",
-                        "product_qty",
-                        "quantity_done",
-                        "state",
-                        "location_id",
-                        "location_dest_id",
-                        "reference",
-                        "picking_id",
-                    ],
-                ]);
-            } else {
-                // Fallback: try to find moves by sale order line
-                console.log("🔍 Trying to find moves by sale order...");
-                const orderLines = await this.call(
-                    "sale.order.line",
-                    "search",
-                    [[["order_id", "=", saleOrderId]]]
+            if (!pickings || pickings.length === 0) {
+                throw new Error(
+                    `No picking found for MercadoLibre shipment ${mlShippingId}`
                 );
-
-                if (orderLines.length) {
-                    moves = await this.call("stock.move", "search_read", [
-                        [["sale_line_id", "in", orderLines]],
-                        [
-                            "id",
-                            "product_id",
-                            "product_qty",
-                            "quantity_done",
-                            "state",
-                            "location_id",
-                            "location_dest_id",
-                            "reference",
-                            "picking_id",
-                        ],
-                    ]);
-                    console.log(
-                        "🔍 Found moves via order lines:",
-                        moves.length
-                    );
-                }
             }
 
-            // 6. Get product details
-            const movesWithProducts = await Promise.all(
-                moves.map(async (move) => {
-                    const product = move.product_id
-                        ? await this.call("product.product", "read", [
-                              move.product_id[0],
-                              [
-                                  "id",
-                                  "default_code",
-                                  "display_name",
-                                  "qty_available",
-                              ],
-                          ])
-                        : {
-                              default_code: "UNKNOWN",
-                              display_name: "Unknown Product",
-                              qty_available: 0,
-                          };
+                  // Format date in Odoo's expected format
+        const now = new Date();
+        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
-                    return {
-                        ...move,
-                        product_sku: product.default_code,
-                        product_name: product.display_name,
-                        current_stock: product.qty_available,
-                    };
+            // 3. Update all relevant pickings
+            const updateResults = await Promise.all(
+                pickings.map(async (picking) => {
+                    return await odooRpc.update("stock.picking", picking.id, {
+                        state: "done",
+                        /* ml_shipping_id: mlShippingId,  */// Store ML shipping ID for reference
+                        date_done: formattedDate,
+                    });
                 })
             );
 
-            // 7. Get warehouse info for context
-            const warehouse = saleOrder.warehouse_id
-                ? await this.call("stock.warehouse", "read", [
-                      saleOrder.warehouse_id[0],
-                      ["name", "code"],
-                  ])
-                : null;
-
-            return {
-                sale_order: {
-                    id: saleOrderId,
-                    name: saleOrder.name,
-                    origin: saleOrder.origin,
-                    client_ref: saleOrder.client_order_ref,
-                    state: saleOrder.state,
-                    warehouse: warehouse
-                        ? {
-                              id: saleOrder.warehouse_id[0],
-                              name: warehouse.name,
-                              code: warehouse.code,
-                          }
-                        : null,
-                },
-                pickings: pickings.map((p) => ({
-                    id: p.id,
-                    name: p.name,
-                    status: p.state,
-                    scheduled_date: p.scheduled_date,
-                    date_done: p.date_done,
-                    move_count: p.move_ids?.length || 0,
-                })),
-                inventory_movements: movesWithProducts.map((m) => ({
-                    move_id: m.id,
-                    product_id: m.product_id?.[0] || null,
-                    product_sku: m.product_sku,
-                    product_name: m.product_name,
-                    quantity: m.product_qty,
-                    quantity_done: m.quantity_done,
-                    status: m.state,
-                    source_location_id: m.location_id?.[0] || null,
-                    source_location_name: m.location_id?.[1] || null,
-                    dest_location_id: m.location_dest_id?.[0] || null,
-                    dest_location_name: m.location_dest_id?.[1] || null,
-                    current_stock: m.current_stock,
-                    picking_id: m.picking_id?.[0] || null,
-                    picking_name: m.picking_id?.[1] || null,
-                })),
-                _debug: {
-                    search_origin:
-                        saleOrder.origin ||
-                        `MELI-${saleOrder.client_order_ref?.replace("ML-", "")}`,
-                    raw_picking_ids: pickingIds,
-                    raw_move_count: moves.length,
-                },
-            };
-        } catch (err) {
-            console.error(
-                `Error fetching inventory info for order ${saleOrderId}:`,
-                err
-            );
-            throw err;
+            return updateResults;
+        } catch (error) {
+            console.error("Error updating shipment status:", error);
+            throw error;
         }
     }
 }

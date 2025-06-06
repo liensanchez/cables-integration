@@ -235,7 +235,7 @@ class MeliAPI {
 
             console.log(`Fetching order with ID: ${orderId}`);
 
-            // Obtener la orden
+            // Get the order
             const orderResponse = await axios.get(
                 `${this.baseUrl}/orders/${orderId}`,
                 {
@@ -250,9 +250,13 @@ class MeliAPI {
                 `Order retrieved successfully: ${JSON.stringify(order)}`
             );
 
-            if (!order.shipping || !order.shipping.id) {
-                const logMessage = `⚠️ [${new Date().toISOString()}] No shipping information found for order ID: ${orderId}\n`;
-
+            // Fix: Check if shipping exists and has id property
+            if (
+                !order.shipping ||
+                order.shipping.id === undefined ||
+                order.shipping.id === null
+            ) {
+                const logMessage = `⚠️ [${new Date().toISOString()}] No shipping ID found for order ID: ${orderId}\n`;
                 const logFilePath = path.join(
                     __dirname,
                     "shipping_warnings.log"
@@ -264,14 +268,64 @@ class MeliAPI {
                     }
                 });
 
-                // Continue execution — no exception thrown
+                // Return the order without shipping details
+                return {
+                    id: order.id,
+                    status: order.status,
+                    date_created: order.date_created,
+                    total_amount: order.total_amount,
+                    currency: order.currency_id,
+                    buyer: {
+                        id: order.buyer.id,
+                        nickname: order.buyer.nickname,
+                        email: order.buyer.email,
+                        phone: order.buyer.phone?.number || null,
+                        first_name: order.buyer.first_name,
+                        last_name: order.buyer.last_name,
+                        identification: {
+                            type: order.buyer.identification?.type || "ID",
+                            number:
+                                order.buyer.identification?.number ||
+                                "No available",
+                        },
+                    },
+                    shipping_info: null, // Explicitly set to null
+                    billing_info: {
+                        tax_payer_type:
+                            order.buyer.tax_payer_type || "Consumidor Final",
+                        buyer_name: `${order.buyer.first_name} ${order.buyer.last_name}`,
+                        identification: {
+                            type: order.buyer.identification?.type || "ID",
+                            number:
+                                order.buyer.identification?.number ||
+                                "No available",
+                        },
+                    },
+                    order_items: order.order_items.map((item) => ({
+                        sku: item.item.seller_sku,
+                        title: item.item.title,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price,
+                        currency: item.currency_id,
+                    })),
+                    payments: order.payments.map((payment) => ({
+                        id: payment.id,
+                        payment_method: payment.payment_method_id,
+                        status: payment.status,
+                        status_detail: payment.status_detail,
+                        total_paid: payment.total_paid_amount,
+                        installments: payment.installments,
+                        installment_amount: payment.transaction_amount,
+                        date_approved: payment.date_approved,
+                    })),
+                };
             }
 
             console.log(
                 `Fetching shipping details for shipping ID: ${order.shipping.id}`
             );
 
-            // Obtener información de envío
+            // Get shipping information
             const shippingResponse = await axios.get(
                 `${this.baseUrl}/shipments/${order.shipping.id}`,
                 {
@@ -337,6 +391,7 @@ class MeliAPI {
                     shipping_status: shipping.status,
                     logistic_type: logisticType,
                     is_fulfillment: logisticType === "fulfillment",
+                    shipping_id: order.shipping.id, // Include the shipping ID in the response
                 },
                 billing_info: {
                     tax_payer_type:
@@ -367,6 +422,7 @@ class MeliAPI {
                     installment_amount: payment.transaction_amount,
                     date_approved: payment.date_approved,
                 })),
+                shipping_id: order.shipping.id, // Also include at root level for easier access
             };
         } catch (error) {
             console.error(
@@ -547,6 +603,24 @@ class MeliAPI {
                 error.response?.data || error.message
             );
             throw error;
+        }
+    }
+
+    async getShipment(shipmentId) {
+        try {
+            const response = await axios.get(
+                `${this.baseUrl}/shipments/${shipmentId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (err) {
+            console.error("Error fetching shipment:", err);
+            throw err;
         }
     }
 }
