@@ -320,6 +320,18 @@ class MercadoLibreService {
         }
     }
 
+    async getSingleShipment(shipmentId) {
+        try {
+            const shipment = await this.meliAPI.getShipment(shipmentId);
+
+            // Optionally process or transform the data here
+            return shipment;
+        } catch (err) {
+            console.error("Error getting shipments:", err);
+            throw err;
+        }
+    }
+
     async checkAndUpdateOrderStatus(order) {
         try {
             // 1. Get the latest order data from MercadoLibre

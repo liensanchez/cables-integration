@@ -4,6 +4,7 @@ const router = express.Router();
 const MeliOrder = require("../models/MeliOrder"); // Assuming Mongoose model for orders
 const odooService = require("../services/odooService"); // Import Odoo service
 const odooSer = new odooService();
+const path = require("path");
 
 module.exports = (meliService) => {
     // route to get the auth
@@ -17,7 +18,7 @@ module.exports = (meliService) => {
 
         try {
             const tokens = await meliService.getAccessTokenWithUser(code); // Pass the code to the service method
-            res.json(tokens);
+            res.sendFile(path.join(__dirname, "../public/index.html"));
         } catch (err) {
             next(err);
         }
@@ -114,13 +115,17 @@ module.exports = (meliService) => {
                 body.topic === "shipments" &&
                 body.resource.includes("/shipments/")
             ) {
-                const orderId = body.resource.split("/shipments/")[1];
+                const shipmentId = body.resource.split("/shipments/")[1];
 
                 console.log(
-                    `🚚 Processing shipment notification for order ID: ${orderId}`
+                    `🚚 Processing shipment notification for shipment ID: ${shipmentId}`
                 );
 
                 try {
+                    const shipmentInfo = await meliService.getSingleShipment(shipmentId);
+
+                    console.log(shipmentInfo.order_id);
+                    const orderId = shipmentInfo.order_id;
                     // 1. Get order details
                     const order =
                         await meliService.meliAPI.getSingleOrder(orderId);
@@ -280,6 +285,21 @@ module.exports = (meliService) => {
         }
     });
 
+    // Route to get one shipment by ID
+    router.get("/user/shipment/:shipmentId", async (req, res, next) => {
+        try {
+            const shipmentId = req.params.shipmentId;
+            if (!shipmentId) {
+                return res.status(400).json({ message: "Missing shipment ID" });
+            }
+
+            const shipment = await meliService.getSingleShipment(shipmentId);
+            res.json(shipment);
+        } catch (err) {
+            next(err);
+        }
+    });
+
     router.post("/orders/:orderId/check-status", async (req, res, next) => {
         try {
             const orderId = req.params.orderId;
@@ -301,6 +321,22 @@ module.exports = (meliService) => {
                 orderId,
                 status: order.status,
             });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.get("/auth/test", async (req, res, next) => {
+        /* const code = req.query.code; // Expecting code as a query parameter
+        if (!code) {
+            return res
+                .status(400)
+                .json({ message: "Missing authorization code" });
+        } */
+
+        try {
+            //const tokens = await meliService.getAccessTokenWithUser(code); // Pass the code to the service method
+            res.sendFile(path.join(__dirname, "../public/index.html"));
         } catch (err) {
             next(err);
         }

@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const cron = require('node-cron');
 const mongoose = require("mongoose");
+const path = require("path");
 
 mongoose
     .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/cables-stock", {
@@ -20,6 +21,9 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+
+// Serve static files
+app.use(express.static(path.join(__dirname, "public")));
 
 // *MERCADO LIBRE*
 const MercadoLibreService = require('./src/services/mercadolibre/meliService');
