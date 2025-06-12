@@ -17,7 +17,11 @@ module.exports = (meliService) => {
         }
 
         try {
+
             const tokens = await meliService.getAccessTokenWithUser(code); // Pass the code to the service method
+            console.log("✅ Tokens received:", tokens);
+            const newToken = await meliService.automaticAccessToken();
+            console.log("✅ Token refreshed automatically", newToken);
             res.sendFile(path.join(__dirname, "../public/index.html"));
         } catch (err) {
             next(err);
@@ -122,7 +126,8 @@ module.exports = (meliService) => {
                 );
 
                 try {
-                    const shipmentInfo = await meliService.getSingleShipment(shipmentId);
+                    const shipmentInfo =
+                        await meliService.getSingleShipment(shipmentId);
 
                     console.log(shipmentInfo.order_id);
                     const orderId = shipmentInfo.order_id;

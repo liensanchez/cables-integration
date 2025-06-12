@@ -29,6 +29,18 @@ app.use(express.static(path.join(__dirname, "public")));
 const MercadoLibreService = require('./src/services/mercadolibre/meliService');
 const meliService = new MercadoLibreService();
 
+// Schedule a cron job to run every 5 hours to check the token expiration
+cron.schedule("0 */5 * * *", async () => {
+    console.log("🕒 Running scheduled token refresh...");
+    try {
+        await meliService.automaticAccessToken();
+        console.log("✅ Token refreshed via cron");
+    } catch (err) {
+        console.error("❌ Cron token refresh failed:", err.message);
+    }
+});
+
+
 // *ODOO*
 const odooService = require('./src/services/odooService');
 const odooSer = new odooService();

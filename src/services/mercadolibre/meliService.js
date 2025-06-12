@@ -1,7 +1,6 @@
 // src/services/mercadolibre/meliService.js
 const MeliAPI = require("./meliAPI");
 const odooService = require("../../services/odooService");
-/* const ErrorQueue = require('../../models/ErrorQueue'); // Assuming Mongoose */
 const MeliOrder = require("../../models/MeliOrder");
 
 class MercadoLibreService {
@@ -19,6 +18,21 @@ class MercadoLibreService {
         } catch (err) {
             console.error("Error getting access token:", err);
             throw err;
+        }
+    }
+
+    async automaticAccessToken() {
+        if (
+            !this.token ||
+            !this.expiresAt ||
+            Date.now() >= this.expiresAt - 60000
+        ) {
+            console.log("🔄 Access token is expired or missing, refreshing...");
+            const automaticToken = await this.meliAPI.refreshAccessToken();
+
+            return automaticToken;
+        } else {
+            console.log("✅ Access token is still valid");
         }
     }
 
