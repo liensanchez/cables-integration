@@ -96,7 +96,7 @@
         }
     },
     {
-        "id": "SELLER",
+        "id": "Buyer",
         "email": "test_user_1232039289@testuser.com",
         "nickname": "TESTUSER1232039289",
         "site_status": "active",

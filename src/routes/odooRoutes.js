@@ -60,10 +60,9 @@ module.exports = (odooSer, meliService) => {
 
     router.get("/inventory/:odoo_id", async (req, res) => {
         try {
-            const inventoryInfo =
-                await odooSer.getInventoryInfoForSaleOrder(
-                    parseInt(req.params.odoo_id)
-                );
+            const inventoryInfo = await odooSer.getInventoryInfoForSaleOrder(
+                parseInt(req.params.odoo_id)
+            );
 
             res.json({
                 success: true,
@@ -75,6 +74,39 @@ module.exports = (odooSer, meliService) => {
                 success: false,
                 error: error.message,
             });
+        }
+    });
+
+    router.get("/odoo-taxes", async (req, res, next) => {
+        try {
+            const taxes = await odooSer.call("account.tax", "search_read", [
+                [],
+                ["id", "name", "amount", "type_tax_use", "company_id"],
+            ]);
+
+            res.json({
+                success: true,
+                count: taxes.length,
+                taxes,
+            });
+        } catch (err) {
+            console.error("❌ Failed to fetch taxes:", err);
+            res.status(500).json({
+                success: false,
+                error: err.message,
+            });
+        }
+    });
+
+    router.get("/odoo-debug-models", async (req, res) => {
+        try {
+            const models = await odooSer.call("ir.model", "search_read", [
+                [["model", "=", "stock.warehouse"]],
+                ["model", "name"],
+            ]);
+            res.json({ models });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 

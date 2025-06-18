@@ -251,7 +251,7 @@ class OdooService {
             partnerIds = await this.call("res.partner", "search", [
                 [["phone", "=", phone]],
             ]);
-        } 
+        }
 
         // Categoría MercadoLibre
         let categoryIds = await this.call("res.partner.category", "search", [
@@ -361,8 +361,8 @@ class OdooService {
 
         // Buscar el almacén correcto según fulfillment
         //!Al reves para poder testear
-        //const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
-        const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
+        const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
+        //const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
         const warehouses = await this.call("stock.warehouse", "search_read", [
             warehouseDomain,
             ["id", "lot_stock_id"],
@@ -409,6 +409,7 @@ class OdooService {
         return saleOrderId;
     }
 
+    /* 
     async addOrderItems(order, saleOrderId) {
         for (const item of order.order_items) {
             const productIds = await this.call("product.product", "search", [
@@ -416,18 +417,63 @@ class OdooService {
             ]);
 
             if (productIds.length) {
+                // Calculate price after 15% adjustment
+                const adjustedPrice = item.unit_price * 0.85; // 15% discount (100% - 15% = 85%)
+
                 await this.call("sale.order.line", "create", [
                     {
                         order_id: saleOrderId,
                         product_id: productIds[0],
                         name: item.title || `Product ${item.sku}`,
                         product_uom_qty: item.quantity,
-                        price_unit: item.unit_price,
+                        price_unit: adjustedPrice, // Use the adjusted price here
                     },
                 ]);
             }
         }
     }
+*/
+async addOrderItems(order, saleOrderId) {
+    // Search for the 16% tax by name (in Spanish localization, often "IVA 16%" or just "16%")
+    const taxIds = await this.call("account.tax", "search", [
+        [["name", "ilike", "16%"]], // You can refine this with more filters like company_id if needed
+    ]);
+
+const allTaxes = await this.call("account.tax", "search_read", [
+    [], // no filters
+    ["id", "name", "type_tax_use"]
+]);
+
+console.log("📦 Available taxes:", allTaxes);
+    
+    if (!taxIds.length) {
+        console.warn("⚠️ No se encontró el impuesto del 16%");
+        return;
+    }
+
+    const taxId = taxIds[0]; // Assuming the first match is correct
+
+    for (const item of order.order_items) {
+        const productIds = await this.call("product.product", "search", [
+            [["default_code", "=", item.sku]],
+        ]);
+
+        if (productIds.length) {
+            const adjustedPrice = item.unit_price * 0.85;
+
+            await this.call("sale.order.line", "create", [
+                {
+                    order_id: saleOrderId,
+                    product_id: productIds[0],
+                    name: item.title || `Product ${item.sku}`,
+                    product_uom_qty: item.quantity,
+                    price_unit: adjustedPrice,
+                    tax_id: [[6, 0, [taxId]]], // Many2many command to set tax
+                },
+            ]);
+        }
+    }
+}
 
     async updateOrderStatus(saleOrderId, meliStatus) {
         const statusMapping = {
