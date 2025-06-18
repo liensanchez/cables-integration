@@ -180,8 +180,6 @@ class OdooService {
 
     async createOrUpdatePartner(order) {
         // Use billing info if available, fall back to shipping info or buyer info
-
-        // Use billing info if available, fall back to shipping info or buyer info
         const billingAddress = order.buyer?.address || {};
         const shippingAddress = order.shipping_info?.address || {};
 
@@ -253,7 +251,7 @@ class OdooService {
             partnerIds = await this.call("res.partner", "search", [
                 [["phone", "=", phone]],
             ]);
-        }
+        } 
 
         // Categoría MercadoLibre
         let categoryIds = await this.call("res.partner.category", "search", [
@@ -362,6 +360,8 @@ class OdooService {
         const isFulfillment = order.is_fulfillment === true;
 
         // Buscar el almacén correcto según fulfillment
+        //!Al reves para poder testear
+        //const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
         const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
         const warehouses = await this.call("stock.warehouse", "search_read", [
             warehouseDomain,

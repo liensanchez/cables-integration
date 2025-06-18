@@ -72,13 +72,37 @@
         }
     },
     {
-        "id": 2491773334,
+        "id": "Buyer",
         "email": "test_user_1039907510@testuser.com",
         "nickname": "TESTUSER1039907510",
         "site_status": "active",
         "password": "28WMhmy0GB",
         "simulated": {
             "email": "test_user_1039907510@testuser.com",
+            "phone": {
+                "number": "5555555555",
+                "area_code": "55",
+                "extension": null,
+                "verified": true
+            },
+            "address": {
+                "street_name": "Avenida Reforma",
+                "street_number": "123",
+                "city": "Ciudad de México",
+                "zip_code": "11100",
+                "state": "Ciudad de México",
+                "country": "México"
+            }
+        }
+    },
+    {
+        "id": "SELLER",
+        "email": "test_user_1232039289@testuser.com",
+        "nickname": "TESTUSER1232039289",
+        "site_status": "active",
+        "password": "4eCMTmaAc1",
+        "simulated": {
+            "email": "test_user_1232039289@testuser.com",
             "phone": {
                 "number": "5555555555",
                 "area_code": "55",

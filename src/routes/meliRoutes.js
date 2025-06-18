@@ -17,61 +17,11 @@ module.exports = (meliService) => {
         }
 
         try {
-
             const tokens = await meliService.getAccessTokenWithUser(code); // Pass the code to the service method
             console.log("✅ Tokens received:", tokens);
             const newToken = await meliService.automaticAccessToken();
             console.log("✅ Token refreshed automatically", newToken);
             res.sendFile(path.join(__dirname, "../public/index.html"));
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    // route to get the products
-    router.get("/user/products", async (req, res, next) => {
-        try {
-            const products = await meliService.getUserProducts();
-            res.json(products);
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    router.get("/user/orders", async (req, res, next) => {
-        try {
-            const orders = await meliService.getUserOrders();
-            res.json(orders);
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    // route to get a single order by ID
-    router.get("/user/orders/:orderId", async (req, res, next) => {
-        try {
-            const orderId = req.params.orderId;
-            if (!orderId) {
-                return res.status(400).json({ message: "Missing order ID" });
-            }
-
-            const order = await meliService.getSingleOrder(orderId);
-            res.json(order);
-        } catch (err) {
-            next(err);
-        }
-    });
-
-    // route to get a single buyer by ID
-    router.get("/user/buyer/:buyerId", async (req, res, next) => {
-        try {
-            const buyerId = req.params.buyerId;
-            if (!buyerId) {
-                return res.status(400).json({ message: "Missing buyer ID" });
-            }
-
-            const buyer = await meliService.getBuyerInfo(buyerId);
-            res.json(buyer);
         } catch (err) {
             next(err);
         }
@@ -233,6 +183,55 @@ module.exports = (meliService) => {
         } catch (err) {
             console.error("Error processing webhook:", err);
             return res.status(500).send("Internal Server Error");
+        }
+    });
+
+    // route to get the products
+    router.get("/user/products", async (req, res, next) => {
+        try {
+            const products = await meliService.getUserProducts();
+            res.json(products);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.get("/user/orders", async (req, res, next) => {
+        try {
+            const orders = await meliService.getUserOrders();
+            res.json(orders);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // route to get a single order by ID
+    router.get("/user/orders/:orderId", async (req, res, next) => {
+        try {
+            const orderId = req.params.orderId;
+            if (!orderId) {
+                return res.status(400).json({ message: "Missing order ID" });
+            }
+
+            const order = await meliService.getSingleOrder(orderId);
+            res.json(order);
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    // route to get a single buyer by ID
+    router.get("/user/buyer/:buyerId", async (req, res, next) => {
+        try {
+            const buyerId = req.params.buyerId;
+            if (!buyerId) {
+                return res.status(400).json({ message: "Missing buyer ID" });
+            }
+
+            const buyer = await meliService.getBuyerInfo(buyerId);
+            res.json(buyer);
+        } catch (err) {
+            next(err);
         }
     });
 

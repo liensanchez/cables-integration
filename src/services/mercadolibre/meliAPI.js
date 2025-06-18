@@ -434,7 +434,6 @@ class MeliAPI {
     }
 
     // fetch single user's buyer info
-
     async getBuyerInfo(buyerId) {
         try {
             // Fetch buyer info from API
