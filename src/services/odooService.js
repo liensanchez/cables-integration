@@ -183,6 +183,8 @@ class OdooService {
         const billingAddress = order.buyer?.address || {};
         const shippingAddress = order.shipping_info?.address || {};
 
+        console.log(`🔍 shippingAddress `, shippingAddress);
+
         // Use identification from either:
         // 1. Billing info (new structure)
         // 2. Buyer's identification (old structure)
@@ -216,7 +218,9 @@ class OdooService {
         const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/;
         let rfcFormatted = rfcRaw;
 
-        if (rfcFormatted && rfcFormatted !== "NOAVAILABLE") {
+        if (rfcFormatted === "XAXX010101000") {
+            rfcFormatted = false;
+        } else if (rfcFormatted && rfcFormatted !== "NOAVAILABLE") {
             if (!rfcRegex.test(rfcFormatted)) {
                 console.warn(
                     `RFC "${rfcFormatted}" no tiene formato válido. Se limpiará.`
@@ -233,12 +237,15 @@ class OdooService {
         ]);
 
         // Si no existe, buscar por RFC
-        if (!partnerIds.length && rfcFormatted) {
+        if (
+            !partnerIds.length &&
+            rfcFormatted &&
+            rfcFormatted !== "XAXX010101000"
+        ) {
             partnerIds = await this.call("res.partner", "search", [
                 [["vat", "=", rfcFormatted]],
             ]);
         }
-
         // Luego por email
         if (!partnerIds.length && email) {
             partnerIds = await this.call("res.partner", "search", [
@@ -307,7 +314,10 @@ class OdooService {
             name: partnerName,
             email: email || fallbackEmail,
             phone: phone || order.shipping_info?.receiver_phone || "",
-            vat: rfcFormatted || "",
+            vat:
+                rfcFormatted && rfcFormatted !== "XAXX010101000"
+                    ? rfcFormatted
+                    : "",
             street,
             zip,
             city,
@@ -361,8 +371,8 @@ class OdooService {
 
         // Buscar el almacén correcto según fulfillment
         //!Al reves para poder testear
-        const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
-        //const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
+        //const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
+        const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
         const warehouses = await this.call("stock.warehouse", "search_read", [
             warehouseDomain,
             ["id", "lot_stock_id"],
@@ -432,48 +442,49 @@ class OdooService {
             }
         }
     }
-*/
-async addOrderItems(order, saleOrderId) {
-    // Search for the 16% tax by name (in Spanish localization, often "IVA 16%" or just "16%")
-    const taxIds = await this.call("account.tax", "search", [
-        [["name", "ilike", "16%"]], // You can refine this with more filters like company_id if needed
-    ]);
 
-const allTaxes = await this.call("account.tax", "search_read", [
-    [], // no filters
-    ["id", "name", "type_tax_use"]
-]);
-
-console.log("📦 Available taxes:", allTaxes);
-    
-    if (!taxIds.length) {
-        console.warn("⚠️ No se encontró el impuesto del 16%");
-        return;
-    }
-
-    const taxId = taxIds[0]; // Assuming the first match is correct
-
-    for (const item of order.order_items) {
-        const productIds = await this.call("product.product", "search", [
-            [["default_code", "=", item.sku]],
+    */
+    async addOrderItems(order, saleOrderId) {
+        // Search for the 16% tax by name (in Spanish localization, often "IVA 16%" or just "16%")
+        const taxIds = await this.call("account.tax", "search", [
+            [["name", "ilike", "16%"]], // You can refine this with more filters like company_id if needed
         ]);
 
-        if (productIds.length) {
-            const adjustedPrice = item.unit_price * 0.85;
+        const allTaxes = await this.call("account.tax", "search_read", [
+            [], // no filters
+            ["id", "name", "type_tax_use"],
+        ]);
 
-            await this.call("sale.order.line", "create", [
-                {
-                    order_id: saleOrderId,
-                    product_id: productIds[0],
-                    name: item.title || `Product ${item.sku}`,
-                    product_uom_qty: item.quantity,
-                    price_unit: adjustedPrice,
-                    tax_id: [[6, 0, [taxId]]], // Many2many command to set tax
-                },
+        console.log("📦 Available taxes:", allTaxes);
+
+        if (!taxIds.length) {
+            console.warn("⚠️ No se encontró el impuesto del 16%");
+            return;
+        }
+
+        const taxId = taxIds[0]; // Assuming the first match is correct
+
+        for (const item of order.order_items) {
+            const productIds = await this.call("product.product", "search", [
+                [["default_code", "=", item.sku]],
             ]);
+
+            if (productIds.length) {
+                const adjustedPrice = item.unit_price / 1.16;
+
+                await this.call("sale.order.line", "create", [
+                    {
+                        order_id: saleOrderId,
+                        product_id: productIds[0],
+                        name: item.title || `Product ${item.sku}`,
+                        product_uom_qty: item.quantity,
+                        price_unit: adjustedPrice,
+                        tax_id: [[6, 0, [taxId]]], // Many2many command to set tax
+                    },
+                ]);
+            }
         }
     }
-}
 
     async updateOrderStatus(saleOrderId, meliStatus) {
         const statusMapping = {

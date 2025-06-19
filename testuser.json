@@ -24,30 +24,6 @@
         }
     },
     {
-        "id": 2467582096,
-        "email": "test_user_199771606@testuser.com",
-        "nickname": "TESTUSER199771606",
-        "site_status": "active",
-        "password": "yAw9Ys1GU0",
-        "simulated": {
-            "email": "test_user_199771606@testuser.com",
-            "phone": {
-                "number": "5555555555",
-                "area_code": "55",
-                "extension": null,
-                "verified": true
-            },
-            "address": {
-                "street_name": "Avenida Reforma",
-                "street_number": "123",
-                "city": "Ciudad de México",
-                "zip_code": "11100",
-                "state": "Ciudad de México",
-                "country": "México"
-            }
-        }
-    },
-    {
         "id": 2481996796,
         "email": "test_user_446185308@testuser.com",
         "nickname": "TESTUSER446185308",
@@ -96,13 +72,37 @@
         }
     },
     {
-        "id": "Buyer",
+        "id": "This is our latest seller",
         "email": "test_user_1232039289@testuser.com",
         "nickname": "TESTUSER1232039289",
         "site_status": "active",
         "password": "4eCMTmaAc1",
         "simulated": {
             "email": "test_user_1232039289@testuser.com",
+            "phone": {
+                "number": "5555555555",
+                "area_code": "55",
+                "extension": null,
+                "verified": true
+            },
+            "address": {
+                "street_name": "Avenida Reforma",
+                "street_number": "123",
+                "city": "Ciudad de México",
+                "zip_code": "11100",
+                "state": "Ciudad de México",
+                "country": "México"
+            }
+        }
+    },
+    {
+        "id": 2467582096,
+        "email": "test_user_199771606@testuser.com",
+        "nickname": "TESTUSER199771606",
+        "site_status": "active",
+        "password": "yAw9Ys1GU0",
+        "simulated": {
+            "email": "test_user_199771606@testuser.com",
             "phone": {
                 "number": "5555555555",
                 "area_code": "55",
