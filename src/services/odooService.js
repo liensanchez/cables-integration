@@ -367,11 +367,13 @@ class OdooService {
     }
 
     async createSalesOrder(order, partnerId) {
-        const isFulfillment = order.is_fulfillment === true;
+        const isFulfillment = order.shipping_info?.is_fulfillment === true;
+        console.log(`📦 Original Fulfillment: ${JSON.stringify(order.shipping_info, null, 2)}`);
+
+
+        console.log(`🚚 Fulfillment status: ${order.shipping_info?.is_fulfillment}`);
 
         // Buscar el almacén correcto según fulfillment
-        //!Al reves para poder testear
-        //const warehouseDomain = [["code", "=", isFulfillment ? "WH" : "ML"]];
         const warehouseDomain = [["code", "=", isFulfillment ? "ML" : "WH"]];
         const warehouses = await this.call("stock.warehouse", "search_read", [
             warehouseDomain,
