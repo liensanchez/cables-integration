@@ -330,6 +330,15 @@ module.exports = (meliService) => {
         }
     });
 
+    router.get("/check-inventory", async (req, res, next) => {
+        try {
+            const inventory = await meliService.checkInventory();
+            res.json(inventory);
+        } catch (err) {
+            next(err);
+        }
+    });
+
     router.get("/auth/test", async (req, res, next) => {
         /* const code = req.query.code; // Expecting code as a query parameter
         if (!code) {

@@ -647,6 +647,76 @@ class MeliAPI {
             throw err;
         }
     }
+
+    async getAvailableInventory() {
+        if (!this.token) {
+            throw new Error("Access token is missing");
+        }
+
+        // Paso 1: obtener los items del vendedor
+        const itemsRes = await axios.get(
+            `${this.baseUrl}/users/${this.userId}/items/search`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                },
+            }
+        );
+
+        const itemIds = itemsRes.data.results;
+
+        if (itemIds.length === 0) return [];
+
+        // Paso 2: obtener user_product_id y consultar stock
+        const inventory = await Promise.all(
+            itemIds.map(async (itemId) => {
+                try {
+                    const itemRes = await axios.get(
+                        `${this.baseUrl}/items/${itemId}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${this.token}`,
+                            },
+                        }
+                    );
+
+                    const { title, id, user_product_id } = itemRes.data;
+
+                    // Si no tiene fulfillment, lo saltamos
+                    if (!user_product_id) return null;
+
+                    const invRes = await axios.get(
+                        `${this.baseUrl}/inventory_items/${user_product_id}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${this.token}`,
+                            },
+                        }
+                    );
+
+                    const warehouse = invRes.data.warehouses?.[0];
+
+                    return {
+                        id,
+                        title,
+                        user_product_id,
+                        available_quantity: warehouse?.available_quantity || 0,
+                        reserved_quantity: warehouse?.reserved_quantity || 0,
+                        warehouse_id: warehouse?.id || null,
+                    };
+                } catch (err) {
+                    console.warn(
+                        `⚠️ Error fetching inventory for item ${itemId}:`,
+                        err.message
+                    );
+                    return null;
+                }
+            })
+        );
+
+        // Filtrar nulos
+        return inventory.filter(Boolean);
+    }
 }
 
 module.exports = MeliAPI;

@@ -403,6 +403,11 @@ class MercadoLibreService {
             );
         }
     }
+
+    async checkInventory() {
+        const inventory = await this.meliAPI.getAvailableInventory();
+        return inventory;
+    }
 }
 
 module.exports = MercadoLibreService;

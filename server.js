@@ -6,6 +6,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const mongoose = require("mongoose");
 const path = require("path");
+const axios = require("axios");
 
 mongoose
     .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/cables-stock", {
@@ -69,4 +70,15 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Integration hub running on port ${PORT}`);
+});
+
+cron.schedule("0 */6 * * *", async () => {
+    console.log("🕒 Running scheduled inventory check...");
+
+    try {
+        const response = await axios.get(`http://localhost:${PORT}/api/meli/check-inventory`);
+        console.log("✅ Inventory check result:", response.data);
+    } catch (err) {
+        console.error("❌ Error in inventory check cron job:", err.message);
+    }
 });
