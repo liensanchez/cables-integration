@@ -648,7 +648,110 @@ class MeliAPI {
         }
     }
 
-    async getAvailableInventory() {
+async getAvailableInventory() {
+    if (!this.token) {
+        throw new Error("Access token is missing");
+    }
+
+    try {
+        // Paso 0: obtener el user_id con el token
+        const userRes = await axios.get(`${this.baseUrl}/users/me`, {
+            headers: {
+                Authorization: `Bearer ${this.token}`,
+            },
+        });
+
+        const userId = userRes.data.id;
+
+        // Paso 1: obtener los items del vendedor
+        const itemsRes = await axios.get(
+            `${this.baseUrl}/users/${userId}/items/search`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                },
+            }
+        );
+
+        const itemIds = itemsRes.data.results;
+        if (itemIds.length === 0) return [];
+
+        // Paso 2: obtener los detalles de cada item
+        const inventory = await Promise.all(
+            itemIds.map(async (itemId) => {
+                try {
+                    const itemRes = await axios.get(
+                        `${this.baseUrl}/items/${itemId}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${this.token}`,
+                            },
+                        }
+                    );
+
+                    const item = itemRes.data;
+
+                    const skuAttr = item.attributes.find(
+                        (attr) => attr.id === "SELLER_SKU"
+                    );
+                    const sku = skuAttr?.value_name || null;
+
+                    // 🚚 Si es fulfillment, usar el stock del inventario
+                    if (item.user_product_id) {
+                        try {
+                            const invRes = await axios.get(
+                                `${this.baseUrl}/inventory_items/${item.user_product_id}`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${this.token}`,
+                                    },
+                                }
+                            );
+
+                            const warehouse = invRes.data?.warehouses?.[0];
+
+                            return {
+                                id: item.id,
+                                title: item.title,
+                                sku,
+                                fulfillment: true,
+                                available_quantity: warehouse?.available_quantity ?? 0,
+                                reserved_quantity: warehouse?.reserved_quantity ?? 0,
+                                warehouse_id: warehouse?.id ?? null,
+                                status: item.status,
+                            };
+                        } catch (fulfillErr) {
+                            console.warn(`⚠️ Error en inventario fulfillment para ${item.id}:`, fulfillErr.message);
+                            // fallback a datos del item si hay error
+                        }
+                    }
+
+                    // 🛒 Normal
+                    return {
+                        id: item.id,
+                        title: item.title,
+                        sku,
+                        fulfillment: false,
+                        available_quantity: item.available_quantity,
+                        sold_quantity: item.sold_quantity,
+                        status: item.status,
+                    };
+                } catch (err) {
+                    console.warn(`⚠️ Error fetching item ${itemId}:`, err.message);
+                    return null;
+                }
+            })
+        );
+
+        return inventory.filter(Boolean);
+    } catch (err) {
+        console.error("❌ Error in getAvailableInventory:", err.message);
+        throw err;
+    }
+}
+
+
+    /*     async getAvailableInventory() {
         if (!this.token) {
             throw new Error("Access token is missing");
         }
@@ -716,7 +819,7 @@ class MeliAPI {
 
         // Filtrar nulos
         return inventory.filter(Boolean);
-    }
+    } */
 }
 
 module.exports = MeliAPI;

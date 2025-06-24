@@ -406,6 +406,24 @@ class MercadoLibreService {
 
     async checkInventory() {
         const inventory = await this.meliAPI.getAvailableInventory();
+
+        console.log("📦 Inventario MercadoLibre:");
+
+        await this.odooService.authenticate(); // ✅ Solo necesitás esto una vez
+
+        for (const item of inventory) {
+            console.log(
+                `🧾 ${item.title} (ID: ${item.id}) - Stock: ${item.available_quantity}, SKU: ${item.sku}`
+            );
+
+            if (item.sku) {
+                await this.odooService.updateStockBySKU(
+                    item.sku,
+                    item.available_quantity
+                );
+            }
+        }
+
         return inventory;
     }
 }
