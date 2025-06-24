@@ -614,52 +614,74 @@ class OdooService {
         }
     }
 
-async updateStockBySKU(sku, newQuantity) {
-    try {
-        const productIds = await this._execute_kw("product.product", "search", [[["default_code", "=", sku]]]);
+    async updateStockBySKU(sku, newQuantity) {
+        try {
+            const productIds = await this._execute_kw(
+                "product.product",
+                "search",
+                [[["default_code", "=", sku]]]
+            );
 
-        if (!productIds.length) {
-            console.warn(`❌ Producto con SKU ${sku} no encontrado en Odoo.`);
-            return null;
-        }
+            if (!productIds.length) {
+                console.warn(
+                    `❌ Producto con SKU ${sku} no encontrado en Odoo.`
+                );
+                return null;
+            }
 
-        const productId = productIds[0];
+            const productId = productIds[0];
 
-        // Leer stock actual
-        const productData = await this._execute_kw("product.product", "read", [
-            [productId],
-            ["product_tmpl_id", "qty_available"]
-        ]);
+            // Leer stock actual
+            const productData = await this._execute_kw(
+                "product.product",
+                "read",
+                [[productId], ["product_tmpl_id", "qty_available"]]
+            );
 
-        const product = productData[0];
-        const currentQuantity = product.qty_available;
-        const productTmplId = product.product_tmpl_id[0];
+            const product = productData[0];
+            const currentQuantity = product.qty_available;
+            const productTmplId = product.product_tmpl_id[0];
 
-        // Comparar antes de actualizar
-        if (currentQuantity === newQuantity) {
-            console.log(`✅ Stock correcto en Odoo para SKU ${sku}: ${currentQuantity}`);
+            // Comparar antes de actualizar
+            if (currentQuantity === newQuantity) {
+                console.log(
+                    `✅ Stock correcto en Odoo para SKU ${sku}: ${currentQuantity}`
+                );
+                return true;
+            }
+
+            // Crear ajuste de stock
+            const result = await this._execute_kw(
+                "stock.change.product.qty",
+                "create",
+                [
+                    {
+                        product_id: productId,
+                        product_tmpl_id: productTmplId,
+                        new_quantity: newQuantity,
+                    },
+                ]
+            );
+
+            // Ejecutar ajuste
+            await this._execute_kw(
+                "stock.change.product.qty",
+                "change_product_qty",
+                [[result]]
+            );
+
+            console.log(
+                `✏️ Stock ajustado en Odoo para SKU ${sku}: de ${currentQuantity} a ${newQuantity}`
+            );
             return true;
+        } catch (err) {
+            console.error(
+                `❌ Error actualizando stock en Odoo para SKU ${sku}:`,
+                err.message
+            );
+            return false;
         }
-
-        // Crear ajuste de stock
-        const result = await this._execute_kw("stock.change.product.qty", "create", [{
-            product_id: productId,
-            product_tmpl_id: productTmplId,
-            new_quantity: newQuantity,
-        }]);
-
-        // Ejecutar ajuste
-        await this._execute_kw("stock.change.product.qty", "change_product_qty", [[result]]);
-
-        console.log(`✏️ Stock ajustado en Odoo para SKU ${sku}: de ${currentQuantity} a ${newQuantity}`);
-        return true;
-    } catch (err) {
-        console.error(`❌ Error actualizando stock en Odoo para SKU ${sku}:`, err.message);
-        return false;
     }
-}
-
-
 
     async _execute_kw(model, method, params) {
         return new Promise((resolve, reject) => {

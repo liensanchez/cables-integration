@@ -165,6 +165,8 @@ module.exports = (meliService) => {
                         );
                     }
 
+                    const inventory = await meliService.checkInventory();
+
                     return res.status(200).send("OK - Shipment processed");
                 } catch (err) {
                     console.error(
