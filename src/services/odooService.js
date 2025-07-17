@@ -629,18 +629,53 @@ class OdooService {
                 return null;
             }
 
+            const locations = await this._execute_kw(
+                "stock.location",
+                "search_read",
+                [
+                    [
+                        ["name", "=", "ML"],
+                        ["usage", "=", "internal"],
+                    ],
+                    ["id", "name"],
+                ]
+            );
+
+            if (!locations.length) {
+                console.warn(`❌ Almacén 'ML' no encontrado.`);
+                return false;
+            }
+
+            const locationId = locations[0].id;
+
             const productId = productIds[0];
 
             // Leer stock actual
-            const productData = await this._execute_kw(
-                "product.product",
-                "read",
-                [[productId], ["product_tmpl_id", "qty_available"]]
+            const quantData = await this._execute_kw(
+                "stock.quant",
+                "search_read",
+                [
+                    [
+                        ["product_id", "=", productId],
+                        ["location_id", "=", locationId],
+                    ],
+                    ["quantity", "product_tmpl_id"],
+                ]
             );
 
-            const product = productData[0];
-            const currentQuantity = product.qty_available;
-            const productTmplId = product.product_tmpl_id[0];
+            const currentQuantity = quantData.length
+                ? quantData[0].quantity
+                : 0;
+            const productTmplId = quantData.length
+                ? quantData[0].product_tmpl_id[0]
+                : null;
+
+            if (!productTmplId) {
+                console.warn(
+                    `❌ No se pudo obtener el product_tmpl_id para SKU ${sku}.`
+                );
+                return false;
+            }
 
             // Comparar antes de actualizar
             if (currentQuantity === newQuantity) {
@@ -659,6 +694,7 @@ class OdooService {
                         product_id: productId,
                         product_tmpl_id: productTmplId,
                         new_quantity: newQuantity,
+                        location_id: locationId,
                     },
                 ]
             );

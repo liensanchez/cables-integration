@@ -72,8 +72,7 @@ app.listen(PORT, () => {
   console.log(`Integration hub running on port ${PORT}`);
 });
 
-cron.schedule("0 * * * *", async () => {
-
+cron.schedule("0 0 * * *", async () => {
     console.log("🕒 Running scheduled inventory check...");
 
     try {
