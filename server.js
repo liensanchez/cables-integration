@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const path = require("path");
 const axios = require("axios");
 
+// ====== DATABASE CONNECTION ======
 mongoose
     .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/cables-stock", {
         useNewUrlParser: true,
@@ -41,25 +42,17 @@ cron.schedule("0 */5 * * *", async () => {
     }
 });
 
+// *AMAZON*
+const AmazonService = require('./src/services/amazon/amznService.js');
+const amznService = new AmazonService();
 
 // *ODOO*
 const odooService = require('./src/services/odooService');
 const odooSer = new odooService();
 
 app.use('/api/meli', require('./src/routes/meliRoutes')(meliService));
+app.use('/api/amzn', require('./src/routes/amznRoutes')(amznService));
 app.use('/api/sync', require('./src/routes/odooRoutes.js')(odooSer, meliService));
-
-
-/* const AmazonService = require('./src/services/amazon/amazonService'); */
-/* const ShopifyService = require('./src/services/shopify/shopifyService'); */
-
-// Initialize services
-/* const amazonService = new AmazonService(); */
-/* const shopifyService = new ShopifyService(); */
-
-// Routes
-/* app.use('/api/amazon', require('./src/routes/amazonRoutes')(amazonService)); */
-/* app.use('/api/shopify', require('./src/routes/shopifyRoutes')(shopifyService)); */
 
 
 // Error handling middleware
@@ -83,3 +76,10 @@ cron.schedule("0 * * * *", async () => {
         console.error("❌ Error in inventory check cron job:", err.message);
     }
 });
+
+// Initialize services
+/* const ShopifyService = require('./src/services/shopify/shopifyService'); */
+/* const shopifyService = new ShopifyService(); */
+
+// Routes
+/* app.use('/api/shopify', require('./src/routes/shopifyRoutes')(shopifyService)); */
